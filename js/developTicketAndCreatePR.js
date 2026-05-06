@@ -6,6 +6,7 @@
 // Import common helper functions
 const { extractTicketKey } = require('./common/jiraHelpers.js');
 const prHelper = require('./common/pullRequest.js');
+const submoduleHelper = require('./common/submodules.js');
 var configLoader = require('./configLoader.js');
 const { GIT_CONFIG, STATUSES, LABELS, resolveStatuses } = require('./config.js');
 
@@ -191,8 +192,18 @@ function performPushOnly(branchName) {
  * @param {string} commitMessage - Commit message
  * @returns {Object} Result with success status and branch name
  */
-function performGitOperations(branchName, commitMessage, baseBranch) {
+function performGitOperations(branchName, commitMessage, baseBranch, config, customParams, ticketKey) {
     try {
+        submoduleHelper.pushManagedSubmodules({
+            run: function(command) {
+                return runCmd({ command: command });
+            },
+            cleanOutput: cleanCommandOutput,
+            config: config,
+            customParams: customParams,
+            ticketKey: ticketKey
+        });
+
         // Stage all changes
         console.log('Staging changes...');
         runCmd({
@@ -633,7 +644,7 @@ function action(params) {
 
         // Perform git operations
         const prTarget = configLoader.resolvePRTargetBranch(config, params.ticket || actualParams.ticket);
-        const gitResult = performGitOperations(branchName, commitMessage, prTarget);
+        const gitResult = performGitOperations(branchName, commitMessage, prTarget, config, _customParams, ticketKey);
         if (!gitResult.success) {
             if (gitResult.isPushFailure) {
                 // Push was rejected — ask the agent to fix the commit, then retry
