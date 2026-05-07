@@ -139,8 +139,22 @@ function configureGitAuthor(config) {
 /**
  * Push already-committed changes to remote (used when CLI agent committed its own work).
  */
-function performPushOnly(branchName) {
+function performPushOnly(branchName, baseBranch) {
     console.log('Pushing pre-committed changes to remote...');
+    var syncResult = prHelper.syncBranchWithBase({
+        branchName: branchName,
+        baseBranch: baseBranch || 'main',
+        workingDir: _workingDir,
+        runCommand: function(command, workingDir) {
+            var args = { command: command };
+            if (workingDir) args.workingDirectory = workingDir;
+            return cli_execute_command(args);
+        }
+    });
+    if (!syncResult.success) {
+        return { success: false, isMergeSyncFailure: true, error: syncResult.error };
+    }
+
     var pushOutput = '';
     var pushThrewException = false;
     try {
@@ -233,8 +247,8 @@ function performGitOperations(branchName, commitMessage, baseBranch, config, cus
             var commitsAhead = parseInt(aheadOutput, 10) || 0;
             if (commitsAhead > 0) {
                 console.log('No uncommitted changes, but branch is ' + commitsAhead + ' commit(s) ahead of ' + originRef + ' — agent already committed. Skipping commit step.');
-                // Jump straight to push
-                return performPushOnly(branchName);
+                // Jump straight to push after syncing with the latest base branch.
+                return performPushOnly(branchName, baseBranch);
             }
 
             // Check if the remote branch already has commits not yet in origin/main
@@ -271,6 +285,24 @@ function performGitOperations(branchName, commitMessage, baseBranch, config, cus
         runCmd({
             command: 'git commit -m "' + safeMessage + '"'
         });
+
+        var syncResult = prHelper.syncBranchWithBase({
+            branchName: branchName,
+            baseBranch: baseBranch || 'main',
+            workingDir: _workingDir,
+            runCommand: function(command, workingDir) {
+                var args = { command: command };
+                if (workingDir) args.workingDirectory = workingDir;
+                return cli_execute_command(args);
+            }
+        });
+        if (!syncResult.success) {
+            return {
+                success: false,
+                isMergeSyncFailure: true,
+                error: syncResult.error
+            };
+        }
 
         // Push to remote
         console.log('Pushing to remote...');

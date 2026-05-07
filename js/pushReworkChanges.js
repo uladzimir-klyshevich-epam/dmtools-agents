@@ -10,6 +10,7 @@
 var configLoader = require('./configLoader.js');
 var scmModule = require('./common/scm.js');
 var submoduleHelper = require('./common/submodules.js');
+var prHelper = require('./common/pullRequest.js');
 const { GIT_CONFIG, STATUSES, LABELS, resolveStatuses } = require('./config.js');
 
 /**
@@ -147,6 +148,11 @@ function commitAndPush(ticketKey, config, customParams) {
     if (!expectedBranch) {
         throw new Error('Could not determine expected PR branch from input/' + ticketKey + '/pr_info.md; refusing to commit or push.');
     }
+    var baseBranch = (config.git && config.git.baseBranch) || 'main';
+    try {
+        var baseMatch = prInfo.match(/\*\*Branch\*\*:\s*`[^`]+`\s*→\s*`([^`]+)`/);
+        if (baseMatch && baseMatch[1]) baseBranch = baseMatch[1].trim();
+    } catch (e) {}
 
     var currentBranch = cleanCommandOutput(cmd('git branch --show-current') || '');
     console.log('Current branch:', currentBranch, '| Expected:', expectedBranch);
@@ -184,6 +190,20 @@ function commitAndPush(ticketKey, config, customParams) {
         hasChanges = true;
     } else {
         console.warn('No file changes detected — pushing existing commits only');
+    }
+
+    var syncResult = prHelper.syncBranchWithBase({
+        branchName: branchName,
+        baseBranch: baseBranch,
+        workingDir: workingDir,
+        runCommand: function(command, dir) {
+            var args = { command: command };
+            if (dir) args.workingDirectory = dir;
+            return cli_execute_command(args);
+        }
+    });
+    if (!syncResult.success) {
+        throw new Error('Could not sync PR branch with origin/' + baseBranch + ' before rework push: ' + syncResult.error);
     }
 
     try {
