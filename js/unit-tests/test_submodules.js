@@ -61,6 +61,10 @@ suite('submodule helper', function() {
             }
         });
 
+        assert.ok(commands.indexOf('git -C trackstate-setup stash push -u -m "dmtools managed submodule changes"') !== -1, 'dirty submodule changes should be stashed before branch alignment');
+        assert.ok(commands.indexOf('git -C trackstate-setup checkout -B main HEAD') !== -1, 'dirty submodule should be moved onto a local branch');
+        assert.ok(commands.indexOf('git -C trackstate-setup rebase origin/main') !== -1, 'dirty submodule should rebase onto the latest remote branch before committing');
+        assert.ok(commands.indexOf('git -C trackstate-setup stash pop') !== -1, 'dirty submodule changes should be restored after rebase');
         assert.ok(commands.indexOf('git -C trackstate-setup add .') !== -1, 'dirty submodule should be staged');
         assert.ok(commands.some(function(command) {
             return command.indexOf('git -C trackstate-setup commit -m "TS-23 Update trackstate-setup assets"') === 0;
@@ -92,6 +96,8 @@ suite('submodule helper', function() {
             }
         });
 
+        assert.ok(commands.indexOf('git -C trackstate-setup checkout -B main HEAD') !== -1, 'clean ahead submodule should be moved onto a local branch');
+        assert.ok(commands.indexOf('git -C trackstate-setup rebase origin/main') !== -1, 'clean ahead submodule should rebase before push');
         assert.ok(commands.indexOf('git -C trackstate-setup add .') === -1, 'clean ahead submodule should not be staged');
         assert.ok(commands.every(function(command) {
             return command.indexOf('git -C trackstate-setup commit -m') === -1;
