@@ -13,6 +13,8 @@
 
 const { STATUSES, LABELS } = require('./config.js');
 const gh = require('./common/githubHelpers.js');
+const autoStart = require('./common/autoStart.js');
+const configLoader = require('./configLoader.js');
 
 function readFile(path) {
     try {
@@ -125,10 +127,38 @@ function postInlineComment(repoInfo, prNumber, inlineComment) {
     }
 }
 
+function triggerReworkIfConfigured(ticketKey, config, customParams) {
+    if (!customParams || !customParams.autoStartRework || !customParams.autoStartReworkConfigFile) {
+        return false;
+    }
+
+    try {
+        return autoStart.triggerConfiguredWorkflowForTicket({
+            ticketKey: ticketKey,
+            customParams: customParams,
+            config: config,
+            configFile: customParams.autoStartReworkConfigFile,
+            label: 'pr_test_automation_rework',
+            stripKeys: [
+                'removeLabel',
+                'autoStartRework',
+                'autoStartReworkConfigFile'
+            ]
+        });
+    } catch (e) {
+        console.warn('⚠️ autoStartRework trigger failed:', e.message || e);
+        return false;
+    }
+}
+
 function action(params) {
     try {
         const ticketKey = params.ticket.key;
         const jiraComment = params.response || '';
+        const customParams = (params.jobParams && params.jobParams.customParams) ||
+            params.customParams ||
+            {};
+        const config = configLoader.loadProjectConfig(params.jobParams || params);
 
         console.log('=== Processing test automation review for', ticketKey, '===');
 
@@ -229,6 +259,7 @@ function action(params) {
             try {
                 jira_move_to_status({ key: ticketKey, statusName: STATUSES.IN_REWORK });
                 console.log('✅ Changes requested — moved', ticketKey, 'to In Rework');
+                triggerReworkIfConfigured(ticketKey, config, customParams);
             } catch (e) {
                 console.warn('Failed to move to In Rework:', e);
             }
