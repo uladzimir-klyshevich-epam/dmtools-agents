@@ -477,6 +477,42 @@ function postErrorCommentToJira(ticketKey, stage, errorMessage) {
     }
 }
 
+function labelsToRemove(customParams, metadata) {
+    var labels = [];
+    if (customParams && customParams.removeLabel) labels.push(customParams.removeLabel);
+    if (customParams && Array.isArray(customParams.removeLabels)) {
+        customParams.removeLabels.forEach(function(label) { labels.push(label); });
+    }
+    if (metadata && metadata.contextId) labels.push(metadata.contextId + '_wip');
+
+    var seen = {};
+    return labels.filter(function(label) {
+        if (!label || seen[label]) return false;
+        seen[label] = true;
+        return true;
+    });
+}
+
+function resetDevelopmentForRetry(ticketKey, statuses, customParams, metadata, stage, errorMessage) {
+    postErrorCommentToJira(ticketKey, stage, errorMessage);
+
+    try {
+        jira_move_to_status({ key: ticketKey, statusName: statuses.READY_FOR_DEVELOPMENT });
+        console.log('✅ Moved', ticketKey, 'to', statuses.READY_FOR_DEVELOPMENT, 'after development workflow error');
+    } catch (e) {
+        console.warn('Failed to move ' + ticketKey + ' to ' + statuses.READY_FOR_DEVELOPMENT + ':', e);
+    }
+
+    labelsToRemove(customParams, metadata).forEach(function(label) {
+        try {
+            jira_remove_label({ key: ticketKey, label: label });
+            console.log('✅ Removed retry-blocking label:', label);
+        } catch (e) {
+            console.warn('Failed to remove retry-blocking label ' + label + ':', e);
+        }
+    });
+}
+
 /**
  * Retry push after asking the agent to fix the commit
  * Used when push is rejected (e.g. GitHub push protection blocked a secret)
@@ -638,9 +674,10 @@ function action(params) {
         // Configure git author
         if (!configureGitAuthor(config)) {
             const error = 'Failed to configure git author';
-            postErrorCommentToJira(ticketKey, 'Git Configuration', error);
+            resetDevelopmentForRetry(ticketKey, statuses, _customParams, actualParams.metadata, 'Git Configuration', error);
             return {
-                success: false,
+                success: true,
+                path: 'development-reset-for-retry',
                 error: error
             };
         }
@@ -668,8 +705,8 @@ function action(params) {
                     console.log('✅ Created and switched to branch:', expectedBranch);
                 } catch (createErr) {
                     const error = 'Could not checkout expected branch "' + expectedBranch + '": ' + createErr;
-                    postErrorCommentToJira(ticketKey, 'Git Branch Checkout', error);
-                    return { success: false, error: error };
+                    resetDevelopmentForRetry(ticketKey, statuses, _customParams, actualParams.metadata, 'Git Branch Checkout', error);
+                    return { success: true, path: 'development-reset-for-retry', error: error };
                 }
             }
         }
@@ -686,8 +723,8 @@ function action(params) {
                 // Push was rejected — ask the agent to fix the commit, then retry
                 const retryResult = retryAfterPushFailure(ticketKey, branchName, gitResult.error);
                 if (!retryResult.success) {
-                    postErrorCommentToJira(ticketKey, 'Git Push (after retry)', retryResult.error);
-                    return { success: false, error: 'Git push failed even after retry: ' + retryResult.error };
+                    resetDevelopmentForRetry(ticketKey, statuses, _customParams, actualParams.metadata, 'Git Push (after retry)', retryResult.error);
+                    return { success: true, path: 'development-reset-for-retry', error: 'Git push failed even after retry: ' + retryResult.error };
                 }
                 // Push succeeded after agent fix — continue to PR creation
             } else if (gitResult.error && gitResult.error.indexOf('No changes were made') !== -1) {
@@ -749,8 +786,8 @@ function action(params) {
                 }
                 return { success: true, path: 'interrupted', ticketKey: ticketKey };
             } else {
-                postErrorCommentToJira(ticketKey, 'Git Operations', gitResult.error);
-                return { success: false, error: 'Git operations failed: ' + gitResult.error };
+                resetDevelopmentForRetry(ticketKey, statuses, _customParams, actualParams.metadata, 'Git Operations', gitResult.error);
+                return { success: true, path: 'development-reset-for-retry', error: 'Git operations failed: ' + gitResult.error };
             }
         }
 
@@ -791,9 +828,10 @@ function action(params) {
         const prResult = createPullRequest(prTitle, branchName, prTarget);
 
         if (!prResult.success) {
-            postErrorCommentToJira(ticketKey, 'Pull Request Creation', prResult.error);
+            resetDevelopmentForRetry(ticketKey, statuses, _customParams, actualParams.metadata, 'Pull Request Creation', prResult.error);
             return {
-                success: false,
+                success: true,
+                path: 'development-reset-for-retry',
                 error: 'PR creation failed: ' + prResult.error
             };
         }
@@ -901,29 +939,28 @@ function action(params) {
     } catch (error) {
         console.error('❌ Error in development workflow:', error);
 
-        // Try to post error comment to ticket
+        // Try to reset ticket for retry instead of leaving it stuck In Development.
         try {
-            const actualParams = params.jobParams || params;
+            const actualParams = params.ticket ? params : (params.jobParams || params);
             if (actualParams && actualParams.ticket && actualParams.ticket.key) {
-                postErrorCommentToJira(actualParams.ticket.key, 'Workflow Execution', error.toString());
+                const customParams = (params.jobParams && params.jobParams.customParams) || actualParams.customParams;
+                const statuses = resolveStatuses(customParams);
+                resetDevelopmentForRetry(
+                    actualParams.ticket.key,
+                    statuses,
+                    customParams,
+                    actualParams.metadata,
+                    'Workflow Execution',
+                    error.toString()
+                );
             }
         } catch (commentError) {
-            console.error('Failed to post error comment:', commentError);
+            console.error('Failed to reset development ticket after error:', commentError);
         }
 
-        // Always remove SM idempotency label on failure to prevent permanent lock
-        try {
-            const actualParams = params.jobParams || params;
-            const customParams = actualParams && actualParams.customParams;
-            const removeLabel = customParams && customParams.removeLabel;
-            if (removeLabel && actualParams.ticket && actualParams.ticket.key) {
-                jira_remove_label({ key: actualParams.ticket.key, label: removeLabel });
-                console.log('✅ Removed SM label on failure:', removeLabel);
-            }
-        } catch (e) {}
-
         return {
-            success: false,
+            success: true,
+            path: 'development-reset-for-retry',
             error: error.toString()
         };
     }
