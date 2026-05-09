@@ -100,4 +100,35 @@ suite('feedbackLoop helper', function() {
         ]);
     });
 
+    test('defaults quality gates to two feedback loops', function() {
+        var gateCalls = 0;
+        var loaded = loadFeedbackLoop({
+            cli_execute_command: function(args) {
+                loaded.commands.push(args.command);
+                if (args.command === 'flutter analyze') {
+                    gateCalls++;
+                    if (gateCalls < 3) throw new Error('analyze failed');
+                }
+                return '';
+            }
+        });
+
+        var result = loaded.mod.runQualityGates({
+            ticketKey: 'TS-3',
+            customParams: {
+                feedbackLoop: {
+                    qualityGates: {
+                        enabled: true,
+                        gates: [{ name: 'flutter-analyze', command: 'flutter analyze' }]
+                    }
+                }
+            },
+            section: 'qualityGates'
+        });
+
+        assert.equal(result.success, true);
+        assert.equal(gateCalls, 3);
+        assert.equal(loaded.files['outputs/feedback/TS-3_quality_gate_flutter-analyze.attempt'], '2');
+    });
+
 });

@@ -1,3 +1,5 @@
+var DEFAULT_MAX_ATTEMPTS = 2;
+
 function sanitizeId(value) {
     return String(value || 'unknown').replace(/[^A-Za-z0-9_.-]+/g, '_');
 }
@@ -93,7 +95,7 @@ function resumeAgent(options) {
     }
 
     var maxAttempts = config.maxAttempts;
-    if (maxAttempts === undefined || maxAttempts === null) maxAttempts = 1;
+    if (maxAttempts === undefined || maxAttempts === null) maxAttempts = DEFAULT_MAX_ATTEMPTS;
     maxAttempts = parseInt(maxAttempts, 10);
     if (!maxAttempts || maxAttempts < 1) return { attempted: false, reason: 'maxAttempts=0' };
 
@@ -150,7 +152,7 @@ function runQualityGates(options) {
 
         var attempts = 0;
         var maxAttempts = gate.maxAttempts;
-        if (maxAttempts === undefined || maxAttempts === null) maxAttempts = 1;
+        if (maxAttempts === undefined || maxAttempts === null) maxAttempts = DEFAULT_MAX_ATTEMPTS;
         maxAttempts = parseInt(maxAttempts, 10) || 0;
 
         while (true) {
@@ -177,7 +179,7 @@ function runQualityGates(options) {
                         feedbackLoop: {
                             qualityGates: {
                                 enabled: true,
-                                maxAttempts: 1,
+                                maxAttempts: maxAttempts,
                                 resumeArgs: gate.resumeArgs || undefined,
                                 nonRecoverablePatterns: gate.nonRecoverablePatterns || undefined
                             }
@@ -203,6 +205,7 @@ function runQualityGates(options) {
 }
 
 module.exports = {
+    DEFAULT_MAX_ATTEMPTS: DEFAULT_MAX_ATTEMPTS,
     resumeAgent: resumeAgent,
     runQualityGates: runQualityGates,
     normalizeConfig: normalizeConfig,
