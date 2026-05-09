@@ -153,4 +153,36 @@ suite('pullRequest helper', function() {
         ]);
     });
 
+    test('realigns submodule working tree before rejecting dirty branch sync', function() {
+        var commands = [];
+        var statusCalls = 0;
+        var pr = loadPullRequestHelper();
+
+        var result = pr.syncBranchWithBase({
+            branchName: 'feature/DMC-6',
+            baseBranch: 'main',
+            workingDir: 'repo',
+            runCommand: function(command, workingDir) {
+                commands.push({ command: command, workingDirectory: workingDir || null });
+                if (command.indexOf('git merge-base --is-ancestor') === 0) throw new Error('not ancestor');
+                if (command === 'git status --porcelain') {
+                    statusCalls++;
+                    return statusCalls === 1 ? ' M agents' : '';
+                }
+                return '';
+            }
+        });
+
+        assert.equal(result.success, true);
+        assert.equal(result.updated, true);
+        assert.deepEqual(commands, [
+            { command: 'git fetch origin main', workingDirectory: 'repo' },
+            { command: 'git merge-base --is-ancestor origin/main HEAD', workingDirectory: 'repo' },
+            { command: 'git status --porcelain', workingDirectory: 'repo' },
+            { command: 'git submodule update --init --recursive', workingDirectory: 'repo' },
+            { command: 'git status --porcelain', workingDirectory: 'repo' },
+            { command: 'git merge --no-edit origin/main', workingDirectory: 'repo' }
+        ]);
+    });
+
 });

@@ -56,12 +56,49 @@ function isSafeRefName(ref) {
         /^[A-Za-z0-9._/-]+$/.test(ref);
 }
 
+function isSafeSubmoduleFilePath(path) {
+    return path &&
+        typeof path === 'string' &&
+        path[0] !== '/' &&
+        path[0] !== '-' &&
+        path.indexOf('..') === -1 &&
+        path.split('/').every(function(segment) { return segment; }) &&
+        /^[A-Za-z0-9._/-]+$/.test(path);
+}
+
 function quoteCommitMessage(message) {
     return '"' + String(message || '')
         .replace(/"/g, '\\"')
         .replace(/[><|;`$\r\n]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim() + '"';
+}
+
+function resolveStashPopConflicts(run, cleanOutput, path) {
+    var unmerged = cleanOutput(run('git -C ' + path + ' diff --name-only --diff-filter=U') || '')
+        .split('\n')
+        .map(function(file) { return file.trim(); })
+        .filter(function(file) { return file; });
+
+    if (unmerged.length === 0) {
+        var statusAfterFailedPop = cleanOutput(run('git -C ' + path + ' status --porcelain') || '');
+        if (!statusAfterFailedPop.trim()) {
+            try { run('git -C ' + path + ' stash drop'); } catch (dropError) {}
+            return '';
+        }
+        throw new Error('Managed submodule stash pop failed without merge conflicts; status:\n' + statusAfterFailedPop);
+    }
+
+    unmerged.forEach(function(file) {
+        if (!isSafeSubmoduleFilePath(file)) {
+            throw new Error('Unsafe conflicted managed submodule file path: ' + file);
+        }
+        run('git -C ' + path + ' checkout --theirs -- ' + file);
+        run('git -C ' + path + ' add ' + file);
+    });
+
+    try { run('git -C ' + path + ' stash drop'); } catch (dropError) {}
+    return cleanOutput(run('git -C ' + path + ' status --porcelain') || '');
 }
 
 function isAncestor(run, path, ancestor, descendant) {
@@ -82,7 +119,12 @@ function prepareDirtySubmoduleBranch(run, cleanOutput, path, branch) {
         run('git -C ' + path + ' checkout -B ' + branch + ' origin/' + branch);
     } finally {
         if (stashed) {
-            run('git -C ' + path + ' stash pop');
+            try {
+                run('git -C ' + path + ' stash pop');
+            } catch (stashPopError) {
+                console.warn('Managed submodule stash pop had conflicts in ' + path + ', accepting stashed agent changes:', stashPopError.message || stashPopError);
+                return resolveStashPopConflicts(run, cleanOutput, path);
+            }
         }
     }
 
@@ -184,5 +226,6 @@ function pushManagedSubmodules(options) {
 module.exports = {
     collectManagedSubmodules: collectManagedSubmodules,
     pushManagedSubmodules: pushManagedSubmodules,
-    isSafeRelativePath: isSafeRelativePath
+    isSafeRelativePath: isSafeRelativePath,
+    isSafeSubmoduleFilePath: isSafeSubmoduleFilePath
 };

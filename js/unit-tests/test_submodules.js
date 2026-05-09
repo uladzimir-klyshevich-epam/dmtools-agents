@@ -207,6 +207,45 @@ suite('submodule helper', function() {
         assert.ok(commands.indexOf('git -C trackstate-setup stash pop') !== -1, 'dirty changes should be restored after branch alignment failure');
     });
 
+    test('accepts stashed agent changes when stash pop conflicts after branch alignment', function() {
+        var helper = loadSubmoduleHelper();
+        var commands = [];
+        helper.pushManagedSubmodules({
+            customParams: {
+                managedSubmodules: [{ path: 'trackstate-setup', branch: 'main' }]
+            },
+            ticketKey: 'TS-76',
+            cleanOutput: function(output) { return output || ''; },
+            run: function(command) {
+                commands.push(command);
+                if (command.indexOf('git config --file .gitmodules --get-regexp') === 0) {
+                    return 'submodule.trackstate-setup.path trackstate-setup';
+                }
+                if (command === 'git -C trackstate-setup status --porcelain') {
+                    return ' M README.md';
+                }
+                if (command === 'git -C trackstate-setup rev-list --count origin/main..HEAD') {
+                    return '0';
+                }
+                if (command === 'git -C trackstate-setup stash pop') {
+                    throw new Error('CONFLICT (content): Merge conflict in README.md');
+                }
+                if (command === 'git -C trackstate-setup diff --name-only --diff-filter=U') {
+                    return 'README.md';
+                }
+                return '';
+            }
+        });
+
+        assert.ok(commands.indexOf('git -C trackstate-setup checkout --theirs -- README.md') !== -1, 'stash conflict should accept stashed agent README changes');
+        assert.ok(commands.indexOf('git -C trackstate-setup add README.md') !== -1, 'resolved stash conflict should be staged');
+        assert.ok(commands.indexOf('git -C trackstate-setup stash drop') !== -1, 'resolved failed stash pop should drop the consumed stash');
+        assert.ok(commands.some(function(command) {
+            return command.indexOf('git -C trackstate-setup commit -m "TS-76 Update trackstate-setup assets"') === 0;
+        }), 'resolved submodule changes should be committed');
+        assert.ok(commands.indexOf('git -C trackstate-setup push origin HEAD:main') !== -1, 'resolved submodule should be pushed');
+    });
+
     test('rejects unregistered managed submodule paths', function() {
         var helper = loadSubmoduleHelper();
 

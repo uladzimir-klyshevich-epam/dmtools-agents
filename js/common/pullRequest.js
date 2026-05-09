@@ -98,6 +98,14 @@ function syncBranchWithBase(options) {
 
         var status = cleanCommandOutput(runCommand('git status --porcelain', workingDir) || '');
         if (status.trim()) {
+            try {
+                runCommand('git submodule update --init --recursive', workingDir);
+                status = cleanCommandOutput(runCommand('git status --porcelain', workingDir) || '');
+            } catch (submoduleError) {
+                console.warn('Could not realign submodules before syncing with base:', submoduleError.message || submoduleError);
+            }
+        }
+        if (status.trim()) {
             return {
                 success: false,
                 error: 'Cannot sync with origin/' + baseBranch + ' because the working tree is not clean:\n' + status
