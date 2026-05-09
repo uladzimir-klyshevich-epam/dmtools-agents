@@ -141,8 +141,8 @@
           "localExecution": true
         },
         {
-          "description": "Backlog / To Do Test Cases → In Development + automate",
-          "jql": "project = {jiraProject} AND issuetype in ('Test Case') AND status in ('Backlog', 'To Do')",
+          "description": "Backlog / To Do / Ready For Development Test Cases → In Development + automate",
+          "jql": "project = {jiraProject} AND issuetype in ('Test Case') AND status in ('Backlog', 'To Do', 'Ready For Development')",
           "targetStatus": "In Development",
           "configFile": "agents/test_case_automation.json",
           "skipIfLabel": "sm_test_automation_triggered",
