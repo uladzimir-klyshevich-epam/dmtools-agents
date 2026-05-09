@@ -12,31 +12,8 @@ var scmModule = require('./common/scm.js');
 var submoduleHelper = require('./common/submodules.js');
 var prHelper = require('./common/pullRequest.js');
 var feedbackLoop = require('./common/feedbackLoop.js');
+var autoStart = require('./common/autoStart.js');
 const { GIT_CONFIG, STATUSES, LABELS, resolveStatuses } = require('./config.js');
-
-/**
- * Derive project key from customParams.configPath or customParams.projectKey.
- */
-function deriveProjectKey(customParams) {
-    if (!customParams) return '';
-    if (customParams.projectKey) return customParams.projectKey;
-    var cp = customParams.configPath || '';
-    if (!cp) return '';
-    var base = cp.substring(cp.lastIndexOf('/') + 1).replace(/\.js$/, '');
-    return (base && base !== 'config') ? base : '';
-}
-
-/**
- * Build minimal encoded_config for an auto-started downstream workflow.
- */
-function buildAutoStartEncodedConfig(ticketKey, customParams) {
-    var p = { inputJql: 'key = ' + ticketKey };
-    var cp = customParams && customParams.configPath;
-    if (cp) {
-        p.customParams = { configPath: cp };
-    }
-    return encodeURIComponent(JSON.stringify({ params: p }));
-}
 
 /**
  * Returns true if the Jira ticket has the pr_approved label.
@@ -67,6 +44,26 @@ function removeConfiguredLabels(ticketKey, customParams) {
                 console.warn('Failed to remove SM label ' + label + ':', e);
             }
         });
+}
+
+function resolveCustomParams(params, actualParams, config) {
+    var merged = {};
+    var patch = configLoader.resolveInstructions(
+        'pr_rework',
+        null,
+        config
+    ).jobParamPatch;
+    if (patch && patch.customParams) {
+        Object.assign(merged, patch.customParams);
+    }
+    Object.assign(
+        merged,
+        (params.jobParams && params.jobParams.customParams) ||
+            (actualParams && actualParams.customParams) ||
+            params.customParams ||
+            {}
+    );
+    return merged;
 }
 
 function cleanCommandOutput(output) {
@@ -332,7 +329,7 @@ function action(params) {
         const fixSummary = actualParams.response || '_(No fix summary generated)_';
         var config = configLoader.loadProjectConfig(params.jobParams || params);
         var scm = scmModule.createScm(config);
-        const _customParams = (params.jobParams && params.jobParams.customParams) || actualParams.customParams;
+        const _customParams = resolveCustomParams(params, actualParams, config);
         const statuses = resolveStatuses(_customParams);
 
         console.log('=== Push rework changes for:', ticketKey, '===');
@@ -451,12 +448,11 @@ function action(params) {
         }
 
         // Remove SM idempotency label so the ticket can be re-triggered next cycle
-        const customParams = params.jobParams && params.jobParams.customParams;
-        removeConfiguredLabels(ticketKey, customParams);
+        removeConfiguredLabels(ticketKey, _customParams);
 
         // Auto-start pr_review after rework is pushed to In Review (opt-in via customParams)
-        const autoStartReview = customParams && customParams.autoStartReview;
-        const reviewConfigFile = customParams && customParams.autoStartReviewConfigFile;
+        const autoStartReview = _customParams && _customParams.autoStartReview;
+        const reviewConfigFile = _customParams && _customParams.autoStartReviewConfigFile;
         if (autoStartReview && reviewConfigFile) {
             // Skip if ticket already has pr_approved label (already approved, merge pending)
             const ticket = actualParams.ticket || (params.jobParams && params.jobParams.ticket);
@@ -464,28 +460,19 @@ function action(params) {
                 console.log('ℹ️ autoStartReview: skipped — ticket has pr_approved label');
             } else {
                 try {
-                    // Use customParams.aiRepository if set (avoids targetRepository override in configLoader)
-                    const aiRepoCfg = customParams && customParams.aiRepository;
-                    const aiOwner = (aiRepoCfg && aiRepoCfg.owner) || (config.repository && config.repository.owner);
-                    const aiRepo  = (aiRepoCfg && aiRepoCfg.repo)  || (config.repository && config.repository.repo);
-                    const projectKey = deriveProjectKey(customParams);
-                    const encodedCfg = buildAutoStartEncodedConfig(ticketKey, customParams);
-                    if (aiOwner && aiRepo) {
-                        scm.triggerWorkflow(
-                            aiOwner, aiRepo, 'ai-teammate.yml',
-                            JSON.stringify({
-                                concurrency_key: ticketKey,
-                                config_file:     reviewConfigFile,
-                                encoded_config:  encodedCfg,
-                                project_key:     projectKey || ''
-                            }),
-                            'main'
-                        );
-                        console.log('✅ Auto-started pr_review for', ticketKey,
-                            '[config=' + reviewConfigFile + (projectKey ? ', project=' + projectKey : '') + ']');
-                    } else {
-                        console.warn('⚠️ autoStartReview: config.repository.owner/repo not set — skipping');
-                    }
+                    autoStart.triggerConfiguredWorkflowForTicket({
+                        ticketKey: ticketKey,
+                        customParams: _customParams,
+                        config: config,
+                        configFile: reviewConfigFile,
+                        label: 'pr_review',
+                        scm: scm,
+                        stripKeys: [
+                            'removeLabel',
+                            'autoStartReview',
+                            'autoStartReviewConfigFile'
+                        ]
+                    });
                 } catch (e) {
                     console.warn('⚠️ autoStartReview trigger failed:', e.message || e);
                 }
@@ -529,5 +516,5 @@ function action(params) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { action };
+    module.exports = { action, resolveCustomParams };
 }

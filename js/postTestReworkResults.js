@@ -201,6 +201,26 @@ function createPRIfMissing(owner, repo, branchName, ticketKey, config) {
     }
 }
 
+function resolveCustomParams(params, actualParams, config) {
+    var merged = {};
+    var patch = configLoader.resolveInstructions(
+        'pr_test_automation_rework',
+        null,
+        config
+    ).jobParamPatch;
+    if (patch && patch.customParams) {
+        Object.assign(merged, patch.customParams);
+    }
+    Object.assign(
+        merged,
+        (actualParams && actualParams.customParams) ||
+            (params.jobParams && params.jobParams.customParams) ||
+            params.customParams ||
+            {}
+    );
+    return merged;
+}
+
 function postThreadReplies(workspace, repository, pullRequestId) {
     const repliesJson = readFile('outputs/review_replies.json');
     if (!repliesJson) {
@@ -255,9 +275,8 @@ function postThreadReplies(workspace, repository, pullRequestId) {
 function action(params) {
     const actualParams = params.ticket ? params : (params.jobParams || params);
     const ticketKey = actualParams.ticket.key;
-    const customParams = (actualParams.customParams) ||
-        (params.jobParams && params.jobParams.customParams) ||
-        (params.customParams);
+    var config = configLoader.loadProjectConfig(params.jobParams || params);
+    const customParams = resolveCustomParams(params, actualParams, config);
     const removeLabel = customParams && customParams.removeLabel;
     const wipLabel = actualParams.metadata && actualParams.metadata.contextId
         ? actualParams.metadata.contextId + '_wip'
@@ -275,8 +294,6 @@ function action(params) {
 
     try {
         const fixSummary = actualParams.response || '_(No fix summary)_';
-        var config = configLoader.loadProjectConfig(params.jobParams || params);
-
         console.log('=== Processing test rework results for', ticketKey, '===');
 
         // Step 1: Read new test result
@@ -459,5 +476,5 @@ function action(params) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { action };
+    module.exports = { action, resolveCustomParams };
 }
