@@ -22,6 +22,7 @@ Notes:
   - Useful for resume: $(basename "$0") --continue --resume "fix the push error"
   - For codemie: requires CODEMIE_API_KEY and CODEMIE_BASE_URL environment variables
   - For copilot: requires COPILOT_GITHUB_TOKEN or GITHUB_TOKEN environment variable
+  - For cursor: optional CURSOR_MODEL env var (default: auto)
   - Final response is written to outputs/response.md
 EOF
 }
@@ -176,9 +177,13 @@ else
     exit 127
   fi
 
+  CURSOR_MODEL_VALUE="${CURSOR_MODEL:-auto}"
+  echo "Cursor Configuration:"
+  echo "  Model: ${CURSOR_MODEL_VALUE}"
+
   # Build command with defaults if no options provided
   if [ ${#PASS_ARGS[@]} -eq 0 ]; then
-    CMD=(cursor-agent --force --print --model 'composer 1.5' --output-format=text "$PROMPT")
+    CMD=(cursor-agent --force --print --model "${CURSOR_MODEL_VALUE}" --output-format=text "$PROMPT")
   else
     CMD=(cursor-agent "${PASS_ARGS[@]}" --output-format=text "$PROMPT")
   fi
