@@ -9,6 +9,7 @@
  */
 
 var configLoader = require('./configLoader.js');
+var prHelper = require('./common/pullRequest.js');
 const { GIT_CONFIG, STATUSES, resolveStatuses } = require('./config.js');
 const fetchQuestionsToInput = require('./fetchQuestionsToInput.js');
 const fetchLinkedTestsToInput = require('./fetchLinkedTestsToInput.js');
@@ -56,7 +57,7 @@ function checkoutBranch(ticketKey, config, ticket) {
     }
 
     try {
-        runCmd({ command: 'git fetch origin --prune' });
+        runCmd({ command: prHelper.buildOriginFetchCommand('--prune') });
     } catch (e) {
         console.warn('Could not fetch remote branches:', e);
     }
@@ -98,11 +99,11 @@ function checkoutBranch(ticketKey, config, ticket) {
             // Explicitly fetch the branch so origin/<branch> tracking ref is available locally.
             // git fetch origin --prune may not populate it if the repo is sparse/shallow.
             try {
-                runCmd({ command: 'git fetch origin ' + branchName + ':' + branchName });
+                runCmd({ command: prHelper.buildOriginFetchCommand(branchName + ':' + branchName) });
                 runCmd({ command: 'git checkout ' + branchName });
             } catch (fetchCheckoutErr) {
                 console.warn('fetch+checkout failed, falling back to -b from origin:', fetchCheckoutErr);
-                runCmd({ command: 'git fetch origin ' + branchName });
+                runCmd({ command: prHelper.buildOriginFetchCommand(branchName) });
                 runCmd({ command: 'git checkout -b ' + branchName + ' origin/' + branchName });
             }
             try {

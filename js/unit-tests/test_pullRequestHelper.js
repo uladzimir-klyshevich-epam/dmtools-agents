@@ -116,7 +116,7 @@ suite('pullRequest helper', function() {
             runCommand: function(command, workingDir) {
                 commands.push({ command: command, workingDirectory: workingDir || null });
                 if (command.indexOf('git merge-base --is-ancestor') === 0) throw new Error('not ancestor');
-                if (command === 'git status --porcelain') return '';
+                if (command === 'git status --porcelain --ignore-submodules=dirty') return '';
                 return '';
             }
         });
@@ -124,9 +124,9 @@ suite('pullRequest helper', function() {
         assert.equal(result.success, true);
         assert.equal(result.updated, true);
         assert.deepEqual(commands, [
-            { command: 'git fetch origin main', workingDirectory: 'repo' },
+            { command: 'git -c fetch.recurseSubmodules=no fetch origin main', workingDirectory: 'repo' },
             { command: 'git merge-base --is-ancestor origin/main HEAD', workingDirectory: 'repo' },
-            { command: 'git status --porcelain', workingDirectory: 'repo' },
+            { command: 'git status --porcelain --ignore-submodules=dirty', workingDirectory: 'repo' },
             { command: 'git merge --no-edit origin/main', workingDirectory: 'repo' }
         ]);
     });
@@ -148,14 +148,13 @@ suite('pullRequest helper', function() {
         assert.equal(result.success, true);
         assert.equal(result.updated, false);
         assert.deepEqual(commands, [
-            'git fetch origin release',
+            'git -c fetch.recurseSubmodules=no fetch origin release',
             'git merge-base --is-ancestor origin/release HEAD'
         ]);
     });
 
-    test('realigns submodule working tree before rejecting dirty branch sync', function() {
+    test('ignores dirty unmanaged submodule worktrees during branch sync', function() {
         var commands = [];
-        var statusCalls = 0;
         var pr = loadPullRequestHelper();
 
         var result = pr.syncBranchWithBase({
@@ -165,10 +164,7 @@ suite('pullRequest helper', function() {
             runCommand: function(command, workingDir) {
                 commands.push({ command: command, workingDirectory: workingDir || null });
                 if (command.indexOf('git merge-base --is-ancestor') === 0) throw new Error('not ancestor');
-                if (command === 'git status --porcelain') {
-                    statusCalls++;
-                    return statusCalls === 1 ? ' M agents' : '';
-                }
+                if (command === 'git status --porcelain --ignore-submodules=dirty') return '';
                 return '';
             }
         });
@@ -176,11 +172,9 @@ suite('pullRequest helper', function() {
         assert.equal(result.success, true);
         assert.equal(result.updated, true);
         assert.deepEqual(commands, [
-            { command: 'git fetch origin main', workingDirectory: 'repo' },
+            { command: 'git -c fetch.recurseSubmodules=no fetch origin main', workingDirectory: 'repo' },
             { command: 'git merge-base --is-ancestor origin/main HEAD', workingDirectory: 'repo' },
-            { command: 'git status --porcelain', workingDirectory: 'repo' },
-            { command: 'git submodule update --init --recursive', workingDirectory: 'repo' },
-            { command: 'git status --porcelain', workingDirectory: 'repo' },
+            { command: 'git status --porcelain --ignore-submodules=dirty', workingDirectory: 'repo' },
             { command: 'git merge --no-edit origin/main', workingDirectory: 'repo' }
         ]);
     });

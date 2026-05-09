@@ -72,7 +72,7 @@ function generateUniqueBranchName(branchPrefix, ticketKey) {
         // Fetch latest remote branches without pulling
         try {
             runCmd({
-                command: 'git fetch origin --prune'
+                command: prHelper.buildOriginFetchCommand('--prune')
             });
         } catch (fetchError) {
             console.warn('Could not fetch remote branches:', fetchError);
@@ -230,10 +230,9 @@ function performGitOperations(branchName, commitMessage, baseBranch, config, cus
         });
 
         // Check if there are changes to commit
-        const rawStatusOutput = runCmd({
-            command: 'git status --porcelain'
-        });
-        const statusOutput = cleanCommandOutput(rawStatusOutput);
+        const statusOutput = prHelper.readStagedDiffStat(function(command) {
+            return runCmd({ command: command });
+        }, _workingDir);
 
         if (!statusOutput || !statusOutput.trim()) {
             // No uncommitted changes — but check if the agent already committed its work
@@ -257,7 +256,7 @@ function performGitOperations(branchName, commitMessage, baseBranch, config, cus
             var remoteAheadOutput = '';
             try {
                 // Fetch remote refs so origin/<branchName> is up to date
-                try { runCmd({ command: 'git fetch origin ' + branchName }); } catch (e) {}
+                try { runCmd({ command: prHelper.buildOriginFetchCommand(branchName) }); } catch (e) {}
                 remoteAheadOutput = cleanCommandOutput(runCmd({ command: 'git rev-list --count ' + originRef + '..origin/' + branchName }) || '');
             } catch (e) {
                 console.warn('Could not check remote branch commits:', e);

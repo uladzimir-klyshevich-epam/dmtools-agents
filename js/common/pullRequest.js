@@ -71,6 +71,22 @@ function defaultWriteFile(path, content) {
     return file_write(path, content);
 }
 
+function buildOriginFetchCommand(refSpec) {
+    return 'git -c fetch.recurseSubmodules=no fetch origin' + (refSpec ? ' ' + refSpec : '');
+}
+
+function readTrackedStatus(runCommand, workingDir) {
+    return cleanCommandOutput(
+        runCommand('git status --porcelain --ignore-submodules=dirty', workingDir) || ''
+    );
+}
+
+function readStagedDiffStat(runCommand, workingDir) {
+    return cleanCommandOutput(
+        runCommand('git diff --cached --stat', workingDir) || ''
+    );
+}
+
 function syncBranchWithBase(options) {
     options = options || {};
     var branchName = options.branchName;
@@ -82,7 +98,7 @@ function syncBranchWithBase(options) {
 
     try {
         console.log('Synchronizing ' + branchName + ' with origin/' + baseBranch + ' before publishing...');
-        runCommand('git fetch origin ' + baseBranch, workingDir);
+        runCommand(buildOriginFetchCommand(baseBranch), workingDir);
 
         var upToDate = false;
         try {
@@ -96,11 +112,11 @@ function syncBranchWithBase(options) {
             return { success: true, updated: false };
         }
 
-        var status = cleanCommandOutput(runCommand('git status --porcelain', workingDir) || '');
+        var status = readTrackedStatus(runCommand, workingDir);
         if (status.trim()) {
             try {
                 runCommand('git submodule update --init --recursive', workingDir);
-                status = cleanCommandOutput(runCommand('git status --porcelain', workingDir) || '');
+                status = readTrackedStatus(runCommand, workingDir);
             } catch (submoduleError) {
                 console.warn('Could not realign submodules before syncing with base:', submoduleError.message || submoduleError);
             }
@@ -206,6 +222,9 @@ function createPullRequest(options) {
 module.exports = {
     cleanCommandOutput: cleanCommandOutput,
     sanitizeTitle: sanitizeTitle,
+    buildOriginFetchCommand: buildOriginFetchCommand,
+    readTrackedStatus: readTrackedStatus,
+    readStagedDiffStat: readStagedDiffStat,
     syncBranchWithBase: syncBranchWithBase,
     createPullRequest: createPullRequest
 };

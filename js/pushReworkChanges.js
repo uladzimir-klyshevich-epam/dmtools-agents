@@ -180,8 +180,7 @@ function commitAndPush(ticketKey, config, customParams) {
 
     cmd('git add .');
 
-    const rawStatus = cmd('git status --porcelain') || '';
-    const status = cleanCommandOutput(rawStatus);
+    const status = prHelper.readStagedDiffStat(cmd, workingDir);
 
     var hasChanges = false;
     if (status.trim()) {

@@ -13,6 +13,7 @@
 var configLoader = require('./configLoader.js');
 var autoStart = require('./common/autoStart.js');
 var feedbackLoop = require('./common/feedbackLoop.js');
+var prHelper = require('./common/pullRequest.js');
 const { GIT_CONFIG, STATUSES, LABELS } = require('./config.js');
 
 function cleanCommandOutput(output) {
@@ -114,9 +115,9 @@ function commitAndPush(ticketKey, passed, config) {
     // Stage only testing/ folder
     cli_execute_command({ command: 'git add testing/' });
 
-    const statusOutput = cleanCommandOutput(
-        cli_execute_command({ command: 'git status --porcelain' }) || ''
-    );
+    const statusOutput = prHelper.readStagedDiffStat(function(command) {
+        return cli_execute_command({ command: command });
+    });
 
     var localSha = '';
     if (statusOutput.trim()) {

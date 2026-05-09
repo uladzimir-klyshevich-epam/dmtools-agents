@@ -12,6 +12,7 @@
 const { LABELS, STATUSES, resolveStatuses } = require('./config.js');
 var scmModule = require('./common/scm.js');
 var autoStart = require('./common/autoStart.js');
+var configLoader = require('./configLoader.js');
 
 /**
  * Derive project key from customParams.configPath or customParams.projectKey.
@@ -49,6 +50,25 @@ function buildAutoStartEncodedConfig(ticketKey, customParams) {
 function hasPrApprovedLabel(ticket) {
     var labels = (ticket && ticket.fields && ticket.fields.labels) ? ticket.fields.labels : [];
     return labels.indexOf(LABELS.PR_APPROVED) !== -1;
+}
+
+function resolveCustomParams(params, config) {
+    var merged = {};
+    var patch = configLoader.resolveInstructions(
+        'pr_review',
+        null,
+        config
+    ).jobParamPatch;
+    if (patch && patch.customParams) {
+        Object.assign(merged, patch.customParams);
+    }
+    Object.assign(
+        merged,
+        (params.jobParams && params.jobParams.customParams) ||
+            params.customParams ||
+            {}
+    );
+    return merged;
 }
 
 /**
@@ -284,7 +304,6 @@ function action(params) {
     try {
         const ticketKey = params.ticket.key;
         const jiraReview = params.response || '';
-        var configLoader = require('./configLoader.js');
         var config = configLoader.loadProjectConfig(params.jobParams || params);
         var scm = scmModule.createScm(config);
         var labels = (params.ticket && params.ticket.fields && params.ticket.fields.labels) ? params.ticket.fields.labels : [];
@@ -305,7 +324,7 @@ function action(params) {
         console.log('Issue counts:', JSON.stringify(reviewData.issueCounts));
 
         // Resolve statuses and customParams
-        const customParams = params.jobParams && params.jobParams.customParams;
+        const customParams = resolveCustomParams(params, config);
         const statuses = resolveStatuses(customParams);
 
         // Step 2: Extract PR info from input folder or find PR using MCP
@@ -645,5 +664,5 @@ function action(params) {
 
 // Export for dmtools standalone execution
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { action };
+    module.exports = { action, resolveCustomParams };
 }
