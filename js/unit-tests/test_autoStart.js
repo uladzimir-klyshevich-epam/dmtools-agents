@@ -90,7 +90,7 @@ suite('autoStart helper', function() {
 
 suite('triggerSmIfIdle', function() {
 
-    test('triggers SM when no other agent runs are active', function() {
+    test('triggers SM when smFallback=true and no other agent runs are active', function() {
         var triggeredWorkflow = null;
         var autoStart = loadAutoStartHelper({
             github_list_workflow_runs: function() {
@@ -102,7 +102,8 @@ suite('triggerSmIfIdle', function() {
         });
 
         var result = autoStart.triggerSmIfIdle({
-            config: { repository: { owner: 'IstiN', repo: 'trackstate' } }
+            config: { repository: { owner: 'IstiN', repo: 'trackstate' } },
+            customParams: { smFallback: true }
         });
 
         assert.equal(result, true, 'should trigger SM when idle');
@@ -125,7 +126,8 @@ suite('triggerSmIfIdle', function() {
         });
 
         var result = autoStart.triggerSmIfIdle({
-            config: { repository: { owner: 'IstiN', repo: 'trackstate' } }
+            config: { repository: { owner: 'IstiN', repo: 'trackstate' } },
+            customParams: { smFallback: true }
         });
 
         assert.equal(result, true, 'should trigger SM when only 1 run (current) is active');
@@ -150,14 +152,15 @@ suite('triggerSmIfIdle', function() {
         });
 
         var result = autoStart.triggerSmIfIdle({
-            config: { repository: { owner: 'IstiN', repo: 'trackstate' } }
+            config: { repository: { owner: 'IstiN', repo: 'trackstate' } },
+            customParams: { smFallback: true }
         });
 
         assert.equal(result, false, 'should not trigger SM when other agents are running');
         assert.equal(triggered, false);
     });
 
-    test('skips SM when smFallback is explicitly false', function() {
+    test('skips SM when smFallback is not set (opt-in required)', function() {
         var triggered = false;
         var autoStart = loadAutoStartHelper({
             github_list_workflow_runs: function() { return JSON.stringify({ workflow_runs: [] }); },
@@ -166,10 +169,25 @@ suite('triggerSmIfIdle', function() {
 
         var result = autoStart.triggerSmIfIdle({
             config: { repository: { owner: 'IstiN', repo: 'trackstate' } },
-            customParams: { smFallback: false }
+            customParams: {}
         });
 
-        assert.equal(result, false, 'should skip SM when smFallback=false');
+        assert.equal(result, false, 'should skip SM when smFallback is not set');
+        assert.equal(triggered, false);
+    });
+
+    test('skips SM when customParams is empty (no opt-in)', function() {
+        var triggered = false;
+        var autoStart = loadAutoStartHelper({
+            github_list_workflow_runs: function() { return JSON.stringify({ workflow_runs: [] }); },
+            github_trigger_workflow: function() { triggered = true; }
+        });
+
+        var result = autoStart.triggerSmIfIdle({
+            config: { repository: { owner: 'IstiN', repo: 'trackstate' } }
+        });
+
+        assert.equal(result, false, 'should skip SM when no customParams');
         assert.equal(triggered, false);
     });
 
@@ -180,7 +198,10 @@ suite('triggerSmIfIdle', function() {
             github_trigger_workflow: function() { triggered = true; }
         });
 
-        var result = autoStart.triggerSmIfIdle({ config: {} });
+        var result = autoStart.triggerSmIfIdle({
+            config: {},
+            customParams: { smFallback: true }
+        });
 
         assert.equal(result, false);
         assert.equal(triggered, false);

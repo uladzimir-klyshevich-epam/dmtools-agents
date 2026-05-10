@@ -125,7 +125,7 @@ function triggerConfiguredWorkflowForTicket(options) {
  *
  * options:
  *   config          — job config (needs config.repository.owner / repo)
- *   customParams    — optional; smFallback=false disables this trigger
+ *   customParams    — required; smFallback=true enables this trigger (opt-in)
  *   smWorkflowFile  — SM workflow file name (default 'sm.yml')
  *   agentWorkflowFile — AI teammate workflow to check (default 'ai-teammate.yml')
  *   scm             — optional pre-built scm instance
@@ -136,8 +136,7 @@ function triggerSmIfIdle(options) {
     var smWorkflowFile = options.smWorkflowFile || 'sm.yml';
     var agentWorkflowFile = options.agentWorkflowFile || 'ai-teammate.yml';
 
-    if (customParams.smFallback === false) {
-        console.log('SM fallback: disabled via smFallback=false');
+    if (!customParams.smFallback) {
         return false;
     }
 
