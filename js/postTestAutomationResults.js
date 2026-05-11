@@ -12,6 +12,7 @@
 
 var configLoader = require('./configLoader.js');
 var prHelper = require('./common/pullRequest.js');
+var autoStart = require('./common/autoStart.js');
 const { GIT_CONFIG, STATUSES, LABELS } = require('./config.js');
 
 function cleanCommandOutput(output) {
@@ -28,9 +29,24 @@ function readFile(path) {
     }
 }
 
-function readResultJson() {
+function readOutputFile(relativePath, workingDir) {
+    var content = readFile(relativePath);
+    if (content) return content;
+
+    if (workingDir) {
+        content = readFile(workingDir + '/' + relativePath);
+        if (content) {
+            console.log('Read from fallback path:', workingDir + '/' + relativePath);
+            return content;
+        }
+    }
+
+    return null;
+}
+
+function readResultJson(workingDir) {
     try {
-        const raw = readFile('outputs/test_automation_result.json');
+        const raw = readOutputFile('outputs/test_automation_result.json', workingDir);
         if (!raw) {
             console.warn('outputs/test_automation_result.json is empty or missing');
             return null;
@@ -66,14 +82,14 @@ function markdownToJiraWiki(markdown) {
     return text.trim();
 }
 
-function readJiraComment(params) {
-    var jiraComment = readFile('outputs/jira_comment.md');
+function readJiraComment(params, workingDir) {
+    var jiraComment = readOutputFile('outputs/jira_comment.md', workingDir);
     if (jiraComment) return jiraComment;
 
-    jiraComment = readFile('outputs/comment.md');
+    jiraComment = readOutputFile('outputs/comment.md', workingDir);
     if (jiraComment) return jiraComment;
 
-    return markdownToJiraWiki(params.response || readFile('outputs/response.md') || '');
+    return markdownToJiraWiki(params.response || readOutputFile('outputs/response.md', workingDir) || '');
 }
 
 function runInRepo(command, workingDir) {
@@ -163,26 +179,77 @@ function createPullRequest(title, branchName, baseBranch, workingDir) {
     });
 }
 
+function autoStartTestReview(ticketKey, config, customParams, noCodeChanges) {
+    if (noCodeChanges) {
+        console.log('ℹ️ autoStartReview: skipped — no test code changes to review');
+        return false;
+    }
+    if (!customParams || !customParams.autoStartReview || !customParams.autoStartReviewConfigFile) {
+        return false;
+    }
+
+    try {
+        return autoStart.triggerConfiguredWorkflowForTicket({
+            ticketKey: ticketKey,
+            customParams: customParams,
+            config: config,
+            configFile: customParams.autoStartReviewConfigFile,
+            label: 'pr_test_automation_review',
+            stripKeys: [
+                'removeLabel',
+                'autoStartReview',
+                'autoStartReviewConfigFile'
+            ]
+        });
+    } catch (e) {
+        console.warn('⚠️ autoStartReview trigger failed:', e.message || e);
+        return false;
+    }
+}
+
 function action(params) {
     try {
         const ticketKey = params.ticket.key;
         const ticketSummary = params.ticket.fields ? params.ticket.fields.summary : ticketKey;
         const projectKey = ticketKey.split('-')[0];
-        const jiraComment = readJiraComment(params);
         var config = configLoader.loadProjectConfig(params.jobParams || params);
         var customParams = (params.jobParams || params).customParams || {};
         var workingDir = config.workingDir || null;
         var testFilesPath = customParams.testFilesGlob || 'testing/';
+        const jiraComment = readJiraComment(params, workingDir);
 
         console.log('=== Processing test automation results for', ticketKey, '===');
 
         // Step 1: Read structured result
-        const result = readResultJson();
+        const result = readResultJson(workingDir);
         if (!result) {
             jira_post_comment({
                 key: ticketKey,
-                comment: 'h3. ⚠️ Test Automation Error\n\nCould not read test result. Check workflow logs.'
+                comment: 'h3. ⚠️ Test Automation Error\n\nCould not read test result. Ticket moved back to *Backlog* so SM can retry.'
             });
+            try {
+                jira_move_to_status({ key: ticketKey, statusName: STATUSES.BACKLOG });
+                console.log('✅ Missing result — moved', ticketKey, 'to', STATUSES.BACKLOG);
+            } catch (e) {
+                console.warn('Failed to move missing-result ticket to Backlog:', e);
+            }
+            try {
+                const smTriggerLabel = params.jobParams && params.jobParams.customParams && params.jobParams.customParams.removeLabel;
+                if (smTriggerLabel) {
+                    jira_remove_label({ key: ticketKey, label: smTriggerLabel });
+                    console.log('✅ Removed SM trigger label after missing result:', smTriggerLabel);
+                }
+            } catch (e) {
+                console.warn('Failed to remove SM trigger label after missing result:', e);
+            }
+            try {
+                const wipLabelMissingResult = params.metadata && params.metadata.contextId
+                    ? params.metadata.contextId + '_wip'
+                    : 'test_case_automation_wip';
+                jira_remove_label({ key: ticketKey, label: wipLabelMissingResult });
+            } catch (e) {
+                console.warn('Failed to remove WIP label after missing result:', e);
+            }
             return { success: false, error: 'No test result JSON found' };
         }
 
@@ -342,6 +409,12 @@ function action(params) {
                 console.log('✅ Failed — moved', ticketKey, 'to', failedStatus);
             } catch (e) {
                 console.warn('Failed to move to Failed:', e);
+            }
+        }
+
+        if (!blockedByHuman) {
+            if (!autoStartTestReview(ticketKey, config, customParams, noCodeChanges)) {
+                autoStart.triggerSmIfIdle({ config: config, customParams: customParams });
             }
         }
 

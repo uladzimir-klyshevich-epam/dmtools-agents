@@ -13,6 +13,8 @@
  *   If config.smRules is provided, uses those instead of params.rules (full override).
  *   Repository owner/repo from config override params when present.
  *   JQL placeholders {jiraProject} and {parentTicket} are resolved from config.
+ *   jobParams.maxTriggeredWorkflows (or maxWorkflowsPerRun) limits total workflow dispatches
+ *   per SM run across all non-local rules.
  *
  * Rule fields:
  *   jql            (required) — JQL to find tickets (supports {jiraProject}, {parentTicket})
@@ -178,6 +180,46 @@ function resolveConfigFile(rule, effectiveConfig) {
     return cf;
 }
 
+function parseWorkflowRuns(raw) {
+    if (!raw) return [];
+    var parsed = raw;
+    if (typeof raw === 'string') {
+        try { parsed = JSON.parse(raw); } catch (e) { return []; }
+    }
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && Array.isArray(parsed.workflow_runs)) return parsed.workflow_runs;
+    if (parsed && Array.isArray(parsed.runs)) return parsed.runs;
+    return [];
+}
+
+function hasActiveTargetWorkflowRun(scm, workflowFile, configFile, ticketKey) {
+    if (!scm || typeof scm.listWorkflowRuns !== 'function') return false;
+
+    var expectedRunName = configFile + ' : ' + ticketKey;
+    var statuses = ['queued', 'in_progress'];
+
+    for (var i = 0; i < statuses.length; i++) {
+        var runs = [];
+        try {
+            runs = parseWorkflowRuns(scm.listWorkflowRuns(statuses[i], workflowFile, 50));
+        } catch (e) {
+            console.warn('  ⚠️  Could not inspect active workflow runs (' + statuses[i] + '): ' + (e.message || e));
+            continue;
+        }
+
+        for (var j = 0; j < runs.length; j++) {
+            var run = runs[j] || {};
+            var runName = run.name || run.display_title || '';
+            if (runName === expectedRunName) {
+                console.log('  ⏭️  ' + ticketKey + ' skipped (active workflow already exists: ' + expectedRunName + ')');
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 function triggerWorkflow(repoInfo, ticketKey, rule, effectiveConfig) {
     var workflowFile = rule.workflowFile || 'ai-teammate.yml';
     var workflowRef  = rule.workflowRef  || 'main';
@@ -194,6 +236,9 @@ function triggerWorkflow(repoInfo, ticketKey, rule, effectiveConfig) {
 
     try {
         var scm = scmModule.createScm(effectiveConfig);
+        if (hasActiveTargetWorkflowRun(scm, workflowFile, resolvedCf, ticketKey)) {
+            return false;
+        }
         scm.triggerWorkflow(
             repoInfo.owner,
             repoInfo.repo,
@@ -252,6 +297,12 @@ function addRuleLabels(ticketKey, rule) {
     normalizeLabels(rule.addLabel, rule.addLabels).forEach(function(label) {
         try { jira_add_label({ key: ticketKey, label: label }); } catch (e) {}
     });
+}
+
+function normalizePositiveInt(value) {
+    if (typeof value !== 'number' || !isFinite(value)) return null;
+    var normalized = Math.floor(value);
+    return normalized > 0 ? normalized : null;
 }
 
 // ─── Local execution ──────────────────────────────────────────────────────────
@@ -397,9 +448,16 @@ function processRuleLocally(rule, globalRepoInfo, ruleIndex) {
 
 // ─── Rule processor ───────────────────────────────────────────────────────────
 
-function processRule(rule, globalRepoInfo, ruleIndex) {
+function processRule(rule, globalRepoInfo, ruleIndex, workflowBudget) {
     if (rule.localExecution) {
         return processRuleLocally(rule, globalRepoInfo, ruleIndex);
+    }
+
+    if (workflowBudget && workflowBudget.remaining <= 0) {
+        var skippedLabel = rule.description || ('Rule #' + (ruleIndex + 1));
+        console.log('\n══ ' + skippedLabel + ' ══');
+        console.log('  ⏭️  Global workflow cap reached (' + workflowBudget.initial + ') — skipping rule');
+        return { processedKeys: [], skippedKeys: [] };
     }
 
     // Load per-rule config if rule.configPath is set; otherwise use global projectConfig.
@@ -436,9 +494,17 @@ function processRule(rule, globalRepoInfo, ruleIndex) {
         return { processedKeys: [], skippedKeys: [] };
     }
 
-    if (typeof rule.limit === 'number' && tickets.length > rule.limit) {
-        console.log('  Limiting from ' + tickets.length + ' to ' + rule.limit + ' ticket(s)');
-        tickets = tickets.slice(0, rule.limit);
+    var ruleLimit = (typeof rule.limit === 'number' && rule.limit > 0) ? Math.floor(rule.limit) : null;
+    var effectiveLimit = ruleLimit;
+    if (workflowBudget) {
+        effectiveLimit = effectiveLimit === null
+            ? workflowBudget.remaining
+            : Math.min(effectiveLimit, workflowBudget.remaining);
+    }
+
+    if (effectiveLimit !== null && tickets.length > effectiveLimit) {
+        console.log('  Limiting from ' + tickets.length + ' to ' + effectiveLimit + ' ticket(s)');
+        tickets = tickets.slice(0, effectiveLimit);
     }
 
     if (tickets.length === 0) {
@@ -451,14 +517,18 @@ function processRule(rule, globalRepoInfo, ruleIndex) {
     var processedKeys = [];
     var skippedKeys   = [];
 
-    tickets.forEach(function(ticket) {
+    for (var idx = 0; idx < tickets.length; idx++) {
+        if (workflowBudget && workflowBudget.remaining <= 0) {
+            break;
+        }
+        var ticket = tickets[idx];
         var key = ticket.key;
 
         var skipLabel = firstMatchingLabel(ticket, normalizeLabels(rule.skipIfLabel, rule.skipIfLabels));
         if (skipLabel) {
             console.log('  ⏭️  ' + key + ' skipped (label: ' + skipLabel + ')');
             skippedKeys.push(key);
-            return;
+            continue;
         }
 
         if (rule.targetStatus) {
@@ -469,8 +539,11 @@ function processRule(rule, globalRepoInfo, ruleIndex) {
 
         if (triggered) addRuleLabels(key, rule);
 
-        if (triggered) processedKeys.push(key);
-    });
+        if (triggered) {
+            processedKeys.push(key);
+            if (workflowBudget) workflowBudget.remaining -= 1;
+        }
+    }
 
     return { processedKeys: processedKeys, skippedKeys: skippedKeys };
 }
@@ -480,6 +553,10 @@ function processRule(rule, globalRepoInfo, ruleIndex) {
 function action(params) {
     var p     = params.jobParams || params;
     var rules = p.rules;
+    var configuredWorkflowCap = normalizePositiveInt(
+        typeof p.maxTriggeredWorkflows !== 'undefined' ? p.maxTriggeredWorkflows : p.maxWorkflowsPerRun
+    );
+    var workflowBudget = configuredWorkflowCap ? { initial: configuredWorkflowCap, remaining: configuredWorkflowCap } : null;
 
     // Load global project configuration (used as default when rules have no configPath)
     projectConfig = configLoader.loadProjectConfig(p);
@@ -509,6 +586,9 @@ function action(params) {
     if (projectConfig.jira.project) {
         console.log('  Jira project: ' + projectConfig.jira.project);
     }
+    if (workflowBudget) {
+        console.log('  Workflow cap per run: ' + workflowBudget.initial);
+    }
 
     // NOTE: JQL interpolation is now done per-rule inside processRule using each rule's
     // effective config. Rules with configPath get their own {jiraProject}/{parentTicket} resolved.
@@ -517,7 +597,7 @@ function action(params) {
     var allSkippedKeys   = [];
 
     rules.forEach(function(rule, i) {
-        var result = processRule(rule, globalRepoInfo, i);
+        var result = processRule(rule, globalRepoInfo, i, workflowBudget);
         allProcessedKeys = allProcessedKeys.concat(result.processedKeys);
         allSkippedKeys   = allSkippedKeys.concat(result.skippedKeys);
     });

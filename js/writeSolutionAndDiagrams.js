@@ -15,6 +15,9 @@
  */
 
 const { LABELS, DIAGRAM_FORMAT, JIRA_FIELDS, STATUSES } = require('./config.js');
+const configLoader = require('./configLoader.js');
+const scmModule = require('./common/scm.js');
+const autoStart = require('./common/autoStart.js');
 
 function action(params) {
     try {
@@ -26,6 +29,7 @@ function action(params) {
 
         // Resolve field names from customParams if provided
         var customParams = (params.customParams) || (params.jobParams && params.jobParams.customParams) || {};
+        var projectConfig = configLoader.loadProjectConfig(params.jobParams || params);
         var solutionField = customParams.solutionField || JIRA_FIELDS.SOLUTION;
         var diagramField  = (customParams.diagramField !== undefined) ? customParams.diagramField : JIRA_FIELDS.DIAGRAMS;
         var outputType    = customParams.outputType || 'replace'; // 'replace' | 'append'
@@ -147,6 +151,29 @@ function action(params) {
             } catch (e) {
                 console.warn('Failed to remove WIP label:', e);
             }
+        }
+
+        var autoStartDevelopment = customParams.autoStartDevelopment === true ||
+            customParams.autoStartDevelopment === 'true';
+        var developmentConfigFile = customParams.autoStartDevelopmentConfigFile;
+        var devStarted = false;
+        if (autoStartDevelopment && developmentConfigFile) {
+            try {
+                devStarted = autoStart.triggerConfiguredWorkflowForTicket({
+                    scm: scmModule.createScm(projectConfig),
+                    config: projectConfig,
+                    ticketKey: ticketKey,
+                    customParams: customParams,
+                    configFile: developmentConfigFile,
+                    label: 'development',
+                    stripKeys: ['autoStartDevelopment', 'autoStartDevelopmentConfigFile']
+                });
+            } catch (e) {
+                console.warn('⚠️ autoStartDevelopment trigger failed:', e.message || e);
+            }
+        }
+        if (!devStarted) {
+            autoStart.triggerSmIfIdle({ config: projectConfig, customParams: customParams });
         }
 
         return { success: true, message: ticketKey + ' solution written, moved to Ready For Development' };
