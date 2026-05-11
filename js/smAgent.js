@@ -15,7 +15,7 @@
  *   JQL placeholders {jiraProject} and {parentTicket} are resolved from config.
  *   jobParams.maxTriggeredWorkflows (or maxWorkflowsPerRun) limits total workflow dispatches
  *   per SM run across all non-local rules.
- *   Override priority: env SM_MAX_WORKFLOWS > config.smMaxWorkflows > sm.json value.
+ *   Override priority: config.smMaxWorkflows (from .dmtools/config.js) > sm.json value.
  *
  * Rule fields:
  *   jql            (required) — JQL to find tickets (supports {jiraProject}, {parentTicket})
@@ -552,15 +552,10 @@ function processRule(rule, globalRepoInfo, ruleIndex, workflowBudget) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 function resolveWorkflowCap(jsonCap, projectCfg) {
-    // Priority: env SM_MAX_WORKFLOWS > config.smMaxWorkflows > sm.json value
-    var envVal = typeof process !== 'undefined' && process.env && process.env.SM_MAX_WORKFLOWS;
-    if (envVal) {
-        var n = normalizePositiveInt(envVal);
-        if (n) { console.log('  Workflow cap override (env SM_MAX_WORKFLOWS): ' + n); return n; }
-    }
+    // Priority: config.smMaxWorkflows (from .dmtools/config.js) > sm.json default
     if (projectCfg && typeof projectCfg.smMaxWorkflows !== 'undefined') {
-        var n2 = normalizePositiveInt(projectCfg.smMaxWorkflows);
-        if (n2) { console.log('  Workflow cap override (config.smMaxWorkflows): ' + n2); return n2; }
+        var n = normalizePositiveInt(projectCfg.smMaxWorkflows);
+        if (n) { console.log('  Workflow cap override (config.smMaxWorkflows): ' + n); return n; }
     }
     return normalizePositiveInt(jsonCap);
 }
