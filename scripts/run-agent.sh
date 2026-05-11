@@ -156,14 +156,18 @@ elif [ "$PROVIDER" = "copilot" ]; then
   # stdin when it is not a TTY (e.g. inside CI pipes). The prompt file path is already
   # available as $PROMPT_ARG when DMTools calls this script with cliPrompt.
   # PASS_ARGS support: flags like --continue --resume are forwarded to the copilot CLI.
+  COPILOT_CMD=(copilot)
+  if ! command -v copilot >/dev/null 2>&1; then
+    COPILOT_CMD=(npx @github/copilot@1.0.44)
+  fi
   if [ -f "${PROMPT_ARG}" ]; then
-    echo "Running: npx @github/copilot --allow-all --model ${COPILOT_MODEL:-gpt-5-mini} ${PASS_ARGS[*]:-} (prompt: ${PROMPT_BYTES} bytes via stdin)"
+    echo "Running: ${COPILOT_CMD[*]} --allow-all --model ${COPILOT_MODEL:-gpt-5-mini} ${PASS_ARGS[*]:-} (prompt: ${PROMPT_BYTES} bytes via stdin)"
     echo ""
-    npx @github/copilot --allow-all --model "${COPILOT_MODEL:-gpt-5-mini}" "${PASS_ARGS[@]}" < "${PROMPT_ARG}"
+    "${COPILOT_CMD[@]}" --allow-all --model "${COPILOT_MODEL:-gpt-5-mini}" "${PASS_ARGS[@]}" < "${PROMPT_ARG}"
   else
-    echo "Running: npx @github/copilot --allow-all --model ${COPILOT_MODEL:-gpt-5-mini} ${PASS_ARGS[*]:-} -p <inline prompt>"
+    echo "Running: ${COPILOT_CMD[*]} --allow-all --model ${COPILOT_MODEL:-gpt-5-mini} ${PASS_ARGS[*]:-} -p <inline prompt>"
     echo ""
-    npx @github/copilot --allow-all --model "${COPILOT_MODEL:-gpt-5-mini}" "${PASS_ARGS[@]}" -p "${PROMPT}"
+    "${COPILOT_CMD[@]}" --allow-all --model "${COPILOT_MODEL:-gpt-5-mini}" "${PASS_ARGS[@]}" -p "${PROMPT}"
   fi
 
   exit_code=$?
