@@ -126,7 +126,7 @@ if [ "$PROVIDER" = "codemie" ]; then
       --api-key "${CODEMIE_API_KEY}"
       --model "${CODEMIE_MODEL:-claude-4-5-sonnet}"
       --provider "litellm"
-      "${PASS_ARGS[@]}"
+      ${PASS_ARGS[@]+"${PASS_ARGS[@]}"}
       -p "$PROMPT"
       --max-turns "${CODEMIE_MAX_TURNS:-50}"
       --dangerously-skip-permissions
@@ -163,11 +163,11 @@ elif [ "$PROVIDER" = "copilot" ]; then
   if [ -f "${PROMPT_ARG}" ]; then
     echo "Running: ${COPILOT_CMD[*]} --allow-all --model ${COPILOT_MODEL:-gpt-5-mini} ${PASS_ARGS[*]:-} (prompt: ${PROMPT_BYTES} bytes via stdin)"
     echo ""
-    "${COPILOT_CMD[@]}" --allow-all --model "${COPILOT_MODEL:-gpt-5-mini}" "${PASS_ARGS[@]}" < "${PROMPT_ARG}"
+    "${COPILOT_CMD[@]}" --allow-all --model "${COPILOT_MODEL:-gpt-5-mini}" ${PASS_ARGS[@]+"${PASS_ARGS[@]}"} < "${PROMPT_ARG}"
   else
     echo "Running: ${COPILOT_CMD[*]} --allow-all --model ${COPILOT_MODEL:-gpt-5-mini} ${PASS_ARGS[*]:-} -p <inline prompt>"
     echo ""
-    "${COPILOT_CMD[@]}" --allow-all --model "${COPILOT_MODEL:-gpt-5-mini}" "${PASS_ARGS[@]}" -p "${PROMPT}"
+    "${COPILOT_CMD[@]}" --allow-all --model "${COPILOT_MODEL:-gpt-5-mini}" ${PASS_ARGS[@]+"${PASS_ARGS[@]}"} -p "${PROMPT}"
   fi
 
   exit_code=$?
