@@ -85,6 +85,17 @@ var FAILED_RESULT = JSON.stringify({
     ]
 });
 
+var COUNT_ONLY_PASSED_RESULT = JSON.stringify({
+    summary: '27/27 passed',
+    passed: 27,
+    failed: 0,
+    skipped: 0,
+    results: [
+        { ticket: 'MAPC-TC-1', title: 'VoiceOver modal', status: 'passed' },
+        { ticket: 'MAPC-TC-2', title: 'Close button label', status: 'passed' }
+    ]
+});
+
 // ── Suite: findFeaturePR with parseMcpResult ──────────────────────────────────
 
 suite('postMobileTestAutomationResults — findFeaturePR', function() {
@@ -199,6 +210,30 @@ suite('postMobileTestAutomationResults — feature PR label', function() {
         assert.ok(removed.indexOf('tests_passed') !== -1, 'should remove tests_passed label');
     });
 
+    test('infers passed status from counts when top-level status is missing', function() {
+        var added = [], removed = [], statusMoves = [];
+        var m = loadPostCli({
+            file_read: function(opts) {
+                if (opts.path === 'outputs/test_automation_result.json') return COUNT_ONLY_PASSED_RESULT;
+                if (opts.path.indexOf('.dmtools/config') !== -1) return null;
+                return null;
+            },
+            github_list_prs: function() {
+                return JSON.stringify({ data: [{ number: 963, title: 'MAPC-6618', head: { ref: 'story/MAPC-6618' } }]});
+            },
+            github_add_pr_label: function(opts) { added.push(opts.label); },
+            github_remove_pr_label: function(opts) { removed.push(opts.label); },
+            jira_move_to_status: function(opts) { statusMoves.push(opts); },
+            cli_execute_command: function() { return 'test/MAPC-6618'; }
+        });
+
+        m.action(makeParams('MAPC-6618'));
+
+        assert.ok(added.indexOf('tests_passed') !== -1, 'should add tests_passed label');
+        assert.ok(removed.indexOf('tests_failed') !== -1, 'should remove tests_failed label');
+        assert.ok(statusMoves.some(function(s) { return s.statusName === 'Passed'; }), 'should move Jira to Passed');
+    });
+
     test('uses custom label names from customParams.labels', function() {
         var added = [];
         var m = loadPostCli({
@@ -283,6 +318,32 @@ suite('postMobileTestAutomationResults — feature PR comment', function() {
 
         assert.equal(prComments.length, 1, 'should post PR comment using pr_body.md fallback');
         assert.ok(prComments[0].text.indexOf('pr_body') !== -1, 'should contain pr_body content');
+    });
+
+    test('prepends verdict when pr_feature_update only contains coverage', function() {
+        var prComments = [];
+
+        var m = loadPostCli({
+            file_read: function(opts) {
+                if (opts.path === 'outputs/test_automation_result.json') return COUNT_ONLY_PASSED_RESULT;
+                if (opts.path === 'outputs/pr_feature_update.md') return '## Automated Test Coverage Added\n\n27 Maestro YAML test flows';
+                if (opts.path.indexOf('.dmtools/config') !== -1) return null;
+                return null;
+            },
+            github_list_prs: function() {
+                return JSON.stringify({ data: [{ number: 963, title: 'MAPC-6618', head: { ref: 'story/MAPC-6618' } }]});
+            },
+            github_add_pr_label: function() {},
+            github_remove_pr_label: function() {},
+            github_add_pr_comment: function(opts) { prComments.push(opts); },
+            cli_execute_command: function() { return 'test/MAPC-6618'; }
+        });
+
+        m.action(makeParams('MAPC-6618'));
+
+        assert.equal(prComments.length, 1, 'should post PR comment');
+        assert.ok(prComments[0].text.indexOf('FIX VERIFIED') !== -1, 'should include inferred verdict');
+        assert.ok(prComments[0].text.indexOf('| 27 | 0 | 0 |') !== -1, 'should include pass/fail counts');
     });
 
 });

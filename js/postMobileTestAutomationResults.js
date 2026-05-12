@@ -157,12 +157,70 @@ function readResultJson(workingDir) {
     }
     try {
         var parsed = JSON.parse(raw);
+        parsed = normalizeResult(parsed);
         console.log('✅ Read test result — status:', parsed.status);
         return parsed;
     } catch (e) {
         console.error('Failed to parse test_automation_result.json:', e);
         return null;
     }
+}
+
+function asNumber(value) {
+    if (value === undefined || value === null || value === '') return null;
+    var n = parseInt(value, 10);
+    return isNaN(n) ? null : n;
+}
+
+function firstNumber(obj, keys) {
+    for (var i = 0; i < keys.length; i++) {
+        var value = asNumber(obj && obj[keys[i]]);
+        if (value !== null) return value;
+    }
+    return null;
+}
+
+function getResultCounts(result) {
+    var passed = firstNumber(result, ['passed', 'passedCount', 'passed_count', 'passedTests', 'passed_tests']);
+    var failed = firstNumber(result, ['failed', 'failedCount', 'failed_count', 'failedTests', 'failed_tests']);
+    var skipped = firstNumber(result, ['skipped', 'skippedCount', 'skipped_count', 'skippedTests', 'skipped_tests']);
+
+    if (result && result.results && Array.isArray(result.results)) {
+        var resultPassed = 0;
+        var resultFailed = 0;
+        var resultSkipped = 0;
+        for (var i = 0; i < result.results.length; i++) {
+            var status = String(result.results[i].status || '').toLowerCase();
+            if (status === 'passed') resultPassed += 1;
+            else if (status === 'skipped') resultSkipped += 1;
+            else if (status === 'failed' || status === 'error') resultFailed += 1;
+        }
+        if (passed === null) passed = resultPassed;
+        if (failed === null) failed = resultFailed;
+        if (skipped === null) skipped = resultSkipped;
+    }
+
+    return {
+        passed: passed === null ? 0 : passed,
+        failed: failed === null ? 0 : failed,
+        skipped: skipped === null ? 0 : skipped
+    };
+}
+
+function normalizeResult(result) {
+    result = result || {};
+    if (!result.status) {
+        var counts = getResultCounts(result);
+        var passRate = String(result.passRate || result.pass_rate || '').trim();
+        if (counts.failed > 0) {
+            result.status = 'failed';
+        } else if (counts.passed > 0 || passRate === '100%' || passRate === '100') {
+            result.status = 'passed';
+        } else if (result.results && Array.isArray(result.results) && result.results.length > 0) {
+            result.status = 'failed';
+        }
+    }
+    return result;
 }
 
 /** Run a command inside the automation repo directory. */
@@ -289,7 +347,22 @@ function updateFeaturePRLabel(owner, repo, prNumber, passed, labelPassed, labelF
 }
 
 /** Post test result summary as a comment on the feature PR. */
-function updateFeaturePRBody(owner, repo, prNumber, workingDir) {
+function buildFeatureVerdictSummary(result) {
+    var counts = getResultCounts(result || {});
+    var status = String((result && result.status) || '').toLowerCase();
+    var verdict = status === 'passed'
+        ? '✅ FIX VERIFIED — Maestro suite passed'
+        : status === 'blocked_by_human'
+        ? '🚫 BLOCKED — test automation needs human setup'
+        : '❌ FIX FAILED — Maestro suite failed';
+    return '## 🤖 Maestro Test Results\n\n' +
+        '**Verdict**: ' + verdict + '\n\n' +
+        '| Passed | Failed | Skipped |\n' +
+        '|--------|--------|---------|\n' +
+        '| ' + counts.passed + ' | ' + counts.failed + ' | ' + counts.skipped + ' |\n\n';
+}
+
+function updateFeaturePRBody(owner, repo, prNumber, workingDir, result) {
     var summaryFile = readOutputFile('outputs/pr_feature_update.md', workingDir);
     if (!summaryFile) {
         // Fallback: use pr_body.md (automation PR description) which has the same test results
@@ -301,6 +374,17 @@ function updateFeaturePRBody(owner, repo, prNumber, workingDir) {
     if (!summaryFile) {
         console.log('No outputs/pr_feature_update.md or pr_body.md — skipping feature PR comment');
         return;
+    }
+
+    if (result) {
+        var lower = summaryFile.toLowerCase();
+        var hasVerdict = lower.indexOf('verdict') !== -1 ||
+            lower.indexOf('test results') !== -1 ||
+            lower.indexOf('passed') !== -1 ||
+            lower.indexOf('failed') !== -1;
+        if (!hasVerdict) {
+            summaryFile = buildFeatureVerdictSummary(result) + summaryFile;
+        }
     }
 
     try {
@@ -478,7 +562,7 @@ function action(params) {
                         }
                     } catch (_) {}
                 }
-                updateFeaturePRBody(featureOwner, featureRepo, featurePR.number, workingDir);
+                updateFeaturePRBody(featureOwner, featureRepo, featurePR.number, workingDir, result);
             }
         }
 
