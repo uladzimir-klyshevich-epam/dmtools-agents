@@ -20,6 +20,7 @@
         "agents/js/unit-tests/test_feedbackLoop.js",
         "agents/js/unit-tests/test_fetchParentContextToInput.js",
         "agents/js/unit-tests/test_testsGeneratedGuard.js",
+        "agents/js/unit-tests/test_postBugCreation.js",
         "agents/js/unit-tests/test_postTestAutomationResults.js",
         "agents/js/unit-tests/test_postTestReviewComments.js",
         "agents/js/unit-tests/test_postPRReviewComments.js",
