@@ -90,7 +90,7 @@ suite('postTestAutomationResults: PR creation', function() {
         assert.notOk(commands.some(function(command) { return command === 'pwd'; }), 'pwd command not used');
     });
 
-    test('skips PR and moves directly to Passed when existing branch has no new test changes', function() {
+    test('pushes synced existing branch before moving directly to Passed when there are no new test changes', function() {
         var commands = [];
         var statuses = [];
         var comments = [];
@@ -129,6 +129,7 @@ suite('postTestAutomationResults: PR creation', function() {
         assert.equal(result.success, true);
         assert.equal(result.prUrl, null);
         assert.ok(commands.some(function(command) { return command === 'git diff --cached --stat'; }), 'checked staged diff');
+        assert.ok(commands.some(function(command) { return command === 'git push -u origin test/DMC-968'; }), 'pushed existing branch after setup sync');
         assert.notOk(commands.some(function(command) { return command.indexOf('gh pr create') === 0; }), 'PR creation skipped');
         assert.ok(statuses.indexOf('Passed') !== -1, 'moved directly to Passed');
         assert.equal(comments.length, 1);

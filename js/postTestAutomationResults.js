@@ -120,20 +120,38 @@ function performGitOperations(branchName, commitMessage, workingDir, testFilesPa
 
         if (!stagedOutput || !stagedOutput.trim()) {
             console.warn('No new staged changes in ' + addPath + ' (files may already exist on branch)');
-            // Ensure the branch is pushed to remote so we can create/find a PR
+            // Ensure the branch is pushed to remote so we can create/find a PR.
+            // preCliTestAutomationSetup may have rebased/merged origin/main into
+            // an existing test branch without changing test files. In that case
+            // there are no staged changes here, but the branch tip still needs to
+            // be published; otherwise the remote test/<KEY> branch stays stale.
             var remoteBranchCheck = cleanCommandOutput(
                 runInRepo('git ls-remote --heads origin ' + branchName, workingDir) || ''
             );
             if (!remoteBranchCheck.trim()) {
                 console.log('No remote branch found, pushing current branch state...');
                 try {
-                    runInRepo('git push -u origin ' + branchName + ' --force', workingDir);
+                    runInRepo('git push -u origin ' + branchName, workingDir);
                 } catch (pushErr) {
                     console.warn('Failed to push branch:', pushErr);
                     return { success: false, error: 'No test files were written and could not push branch' };
                 }
             } else {
-                console.log('Branch exists on remote — test files unchanged, will create/find PR from existing branch');
+                console.log('Branch exists on remote — pushing current branch state in case setup synced it from main');
+                try {
+                    runInRepo('git push -u origin ' + branchName, workingDir);
+                } catch (pushErr) {
+                    console.log('Normal push failed, retrying with --force-with-lease for rebased test branch...');
+                    try {
+                        runInRepo('git push -u origin ' + branchName + ' --force-with-lease', workingDir);
+                    } catch (forcePushErr) {
+                        console.warn('Failed to publish synced existing branch:', forcePushErr);
+                        return {
+                            success: false,
+                            error: 'No test files were written and the synced branch could not be pushed'
+                        };
+                    }
+                }
             }
             return { success: true, branchName: branchName, noNewCommit: true };
         }
