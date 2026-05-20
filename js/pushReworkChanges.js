@@ -14,6 +14,7 @@ var prHelper = require('./common/pullRequest.js');
 var feedbackLoop = require('./common/feedbackLoop.js');
 var autoStart = require('./common/autoStart.js');
 const { GIT_CONFIG, STATUSES, LABELS, resolveStatuses } = require('./config.js');
+var cacheToReleases = require('./cacheToReleases.js');
 
 /**
  * Returns true if the Jira ticket has the pr_approved label.
@@ -503,6 +504,9 @@ function action(params) {
         if (!reviewStarted) {
             autoStart.triggerSmIfIdle({ config: config, customParams: _customParams, scm: scm });
         }
+
+        // Cache configured artefacts (e.g. cosmo test reports) to GitHub Release — non-fatal
+        try { cacheToReleases.action(params); } catch (e) { console.warn('⚠️ cacheToReleases failed (non-fatal):', e); }
 
         console.log('✅ Rework workflow completed successfully');
 

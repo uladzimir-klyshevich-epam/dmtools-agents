@@ -11,6 +11,7 @@ const feedbackLoop = require('./common/feedbackLoop.js');
 var configLoader = require('./configLoader.js');
 var autoStart = require('./common/autoStart.js');
 const { GIT_CONFIG, STATUSES, LABELS, resolveStatuses } = require('./config.js');
+var cacheToReleases = require('./cacheToReleases.js');
 
 function deriveProjectKey(customParams) {
     if (!customParams) return '';
@@ -990,6 +991,9 @@ function action(params) {
         if (!reviewStarted) {
             autoStart.triggerSmIfIdle({ config: config, customParams: customParams });
         }
+
+        // Cache configured artefacts (e.g. cosmo test reports) to GitHub Release — non-fatal
+        try { cacheToReleases.action(params); } catch (e) { console.warn('⚠️ cacheToReleases failed (non-fatal):', e); }
 
         return {
             success: true,

@@ -14,6 +14,7 @@ const { GIT_CONFIG, STATUSES, resolveStatuses } = require('./config.js');
 const fetchQuestionsToInput = require('./fetchQuestionsToInput.js');
 const fetchLinkedTestsToInput = require('./fetchLinkedTestsToInput.js');
 const fetchParentContextToInput = require('./fetchParentContextToInput.js');
+var restoreFromReleases = require('./restoreFromReleases.js');
 
 // Universal working-directory-aware wrapper for cli_execute_command.
 // When config.workingDir is set (via customParams.targetRepository.workingDir),
@@ -178,6 +179,9 @@ function action(params) {
         var config = configLoader.loadProjectConfig(params.jobParams || params);
         var customParams = (params.jobParams && params.jobParams.customParams) || actualParams.customParams;
         var statuses = resolveStatuses(customParams);
+
+        // Restore configured artefacts (e.g. cosmo test reports) from GitHub Release — non-fatal
+        try { restoreFromReleases.action(params); } catch (e) { console.warn('⚠️ restoreFromReleases failed (non-fatal):', e); }
 
         var folder = actualParams.inputFolderPath;
         var ticketKey = folder.split('/').pop();
