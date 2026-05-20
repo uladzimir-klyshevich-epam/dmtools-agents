@@ -101,16 +101,39 @@ function action(params) {
 
             if (asset.postToPRComment === true && result.success && result.releaseUrl) {
                 try {
-                    jira_post_comment({
-                        key: ticketKey,
-                        comment: 'h4. 📦 Artefact Cached: *' + asset.name + '*\n\n' +
-                                 'Folder `' + releaseArtefacts.resolveTemplate(asset.fromFolder, ticketKey) +
-                                 '` has been archived.\n\n' +
-                                 '*Release:* ' + result.releaseUrl
-                    });
-                    console.log('✅ Posted release link to Jira for "' + asset.name + '"');
+                    var targetRepo = customParams.targetRepository;
+                    if (targetRepo && targetRepo.owner && targetRepo.repo) {
+                        // Find open PR for this ticket
+                        var prsJson = github_list_pull_requests({
+                            workspace: targetRepo.owner,
+                            repository: targetRepo.repo,
+                            state: 'open'
+                        });
+                        var prs = typeof prsJson === 'string' ? JSON.parse(prsJson) : prsJson;
+                        var matchingPr = (prs || []).filter(function(pr) {
+                            return (pr.title && pr.title.indexOf(ticketKey) !== -1) ||
+                                   (pr.head && pr.head.ref && pr.head.ref.toLowerCase().indexOf(ticketKey.toLowerCase()) !== -1);
+                        })[0];
+
+                        if (matchingPr) {
+                            github_add_pr_comment({
+                                workspace: targetRepo.owner,
+                                repository: targetRepo.repo,
+                                pullRequestId: String(matchingPr.number),
+                                comment: '## 📦 Artefact: ' + asset.name + '\n\n' +
+                                         'Folder `' + releaseArtefacts.resolveTemplate(asset.fromFolder, ticketKey) +
+                                         '` has been archived to GitHub Release.\n\n' +
+                                         '**Release:** ' + result.releaseUrl
+                            });
+                            console.log('✅ Posted release link to PR #' + matchingPr.number + ' for "' + asset.name + '"');
+                        } else {
+                            console.warn('⚠️  No open PR found for', ticketKey, '— skipping PR comment');
+                        }
+                    } else {
+                        console.warn('⚠️  targetRepository not configured — skipping PR comment');
+                    }
                 } catch (commentErr) {
-                    console.warn('⚠️  Could not post Jira comment for "' + asset.name + '":', commentErr);
+                    console.warn('⚠️  Could not post PR comment for "' + asset.name + '":', commentErr);
                 }
             }
         }

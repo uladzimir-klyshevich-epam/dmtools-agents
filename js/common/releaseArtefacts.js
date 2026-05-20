@@ -82,7 +82,7 @@ function zipFolder(folderPath, assetName) {
         }) || '';
 
         // Verify the zip was actually created
-        var check = cli_execute_command({ command: 'find ' + zipPath + ' -maxdepth 0 -type f 2>/dev/null' }) || '';
+        var check = cli_execute_command({ command: 'bash -c "find ' + zipPath + ' -maxdepth 0 -type f 2>/dev/null"' }) || '';
         if (!check.trim()) {
             console.error('zip command ran but file not found at:', zipPath, 'output:', output.substring(0, 200));
             return null;
@@ -139,7 +139,7 @@ function uploadArtefact(owner, repo, ticketKey, releaseConfig, asset) {
 
     // Check folder exists
     try {
-        var folderCheck = cli_execute_command({ command: 'find ' + folderPath + ' -maxdepth 0 -type d 2>/dev/null' }) || '';
+        var folderCheck = cli_execute_command({ command: 'bash -c "find ' + folderPath + ' -maxdepth 0 -type d 2>/dev/null"' }) || '';
         if (!folderCheck.trim()) {
             console.warn('⚠️  Folder does not exist, skipping cache:', folderPath);
             return { success: false, error: 'Folder not found: ' + folderPath };
@@ -246,7 +246,7 @@ function downloadArtefact(owner, repo, ticketKey, releaseConfig, asset) {
                      ' --clobber'
         });
 
-        var check = cli_execute_command({ command: 'find ' + zipPath + ' -maxdepth 0 -type f 2>/dev/null' }) || '';
+        var check = cli_execute_command({ command: 'bash -c "find ' + zipPath + ' -maxdepth 0 -type f 2>/dev/null"' }) || '';
         if (!check.trim()) {
             return { success: false, restored: false, error: 'Download produced no file at ' + zipPath };
         }
