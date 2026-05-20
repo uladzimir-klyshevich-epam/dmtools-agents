@@ -177,4 +177,6 @@ function action(params) {
     saveSessionArtefact(customParams, ticketKey, contextId, currentCliOutput);
 }
 
-module.exports = { action: action };
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { action: action };
+}
