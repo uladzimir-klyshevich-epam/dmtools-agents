@@ -81,9 +81,10 @@ function zipFolder(folderPath, assetName) {
             command: 'bash -c "zip -r ' + zipPath + ' ' + folderPath + '"'
         }) || '';
 
-        // Verify the zip was actually created
-        var check = cli_execute_command({ command: 'bash -c "find ' + zipPath + ' -maxdepth 0 -type f 2>/dev/null"' }) || '';
-        if (!check.trim()) {
+        // Verify the zip was actually created (ls is whitelisted, throws if not found)
+        try {
+            cli_execute_command({ command: 'ls ' + zipPath });
+        } catch (verifyErr) {
             console.error('zip command ran but file not found at:', zipPath, 'output:', output.substring(0, 200));
             return null;
         }
@@ -137,16 +138,12 @@ function uploadArtefact(owner, repo, ticketKey, releaseConfig, asset) {
 
     console.log('📦 Caching "' + assetName + '" from', folderPath, '→ release', tag, '/', assetFile);
 
-    // Check folder exists
+    // Check folder exists (ls is whitelisted, throws if path not found)
     try {
-        var folderCheck = cli_execute_command({ command: 'bash -c "find ' + folderPath + ' -maxdepth 0 -type d 2>/dev/null"' }) || '';
-        if (!folderCheck.trim()) {
-            console.warn('⚠️  Folder does not exist, skipping cache:', folderPath);
-            return { success: false, error: 'Folder not found: ' + folderPath };
-        }
+        cli_execute_command({ command: 'ls ' + folderPath });
     } catch (e) {
-        console.warn('⚠️  Could not check folder existence:', e);
-        return { success: false, error: 'Could not check folder: ' + e };
+        console.warn('⚠️  Folder does not exist, skipping cache:', folderPath);
+        return { success: false, error: 'Folder not found: ' + folderPath };
     }
 
     var zipPath = zipFolder(folderPath, assetName);
@@ -246,8 +243,10 @@ function downloadArtefact(owner, repo, ticketKey, releaseConfig, asset) {
                      ' --clobber'
         });
 
-        var check = cli_execute_command({ command: 'bash -c "find ' + zipPath + ' -maxdepth 0 -type f 2>/dev/null"' }) || '';
-        if (!check.trim()) {
+        // Verify download produced a file (ls throws if not found)
+        try {
+            cli_execute_command({ command: 'ls ' + zipPath });
+        } catch (lsErr) {
             return { success: false, restored: false, error: 'Download produced no file at ' + zipPath };
         }
 
