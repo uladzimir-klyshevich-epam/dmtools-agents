@@ -75,9 +75,7 @@ function zipFolder(folderPath, assetName) {
 
     try {
         // Remove stale zip if present
-        try {
-            cli_execute_command({ command: 'rm -f ' + zipPath });
-        } catch (e) { /* ignore */ }
+        try { file_delete({ path: zipPath }); } catch (e) { /* ignore */ }
 
         var output = cli_execute_command({
             command: 'zip -r ' + zipPath + ' ' + folderPath
@@ -190,7 +188,7 @@ function uploadArtefact(owner, repo, ticketKey, releaseConfig, asset) {
         console.error('Failed to upload "' + assetFile + '":', e);
         return { success: false, releaseUrl: null, assetUrl: null, error: String(e) };
     } finally {
-        try { cli_execute_command({ command: 'rm -f ' + zipPath }); } catch (e2) { /* ignore */ }
+        try { file_delete({ path: zipPath }); } catch (e2) { /* ignore */ }
     }
 }
 
@@ -238,7 +236,7 @@ function downloadArtefact(owner, repo, ticketKey, releaseConfig, asset) {
         }
 
         // Download the specific asset by name
-        try { cli_execute_command({ command: 'rm -f ' + zipPath }); } catch (e) { /* ignore */ }
+        try { file_delete({ path: zipPath }); } catch (e) { /* ignore */ }
 
         cli_execute_command({
             command: 'gh release download ' + tag +
@@ -266,7 +264,7 @@ function downloadArtefact(owner, repo, ticketKey, releaseConfig, asset) {
         console.error('Failed to restore "' + assetName + '":', e);
         return { success: false, restored: false, error: errStr };
     } finally {
-        try { cli_execute_command({ command: 'rm -f ' + zipPath }); } catch (e2) { /* ignore */ }
+        try { file_delete({ path: zipPath }); } catch (e2) { /* ignore */ }
     }
 }
 
