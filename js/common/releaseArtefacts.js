@@ -78,12 +78,12 @@ function zipFolder(folderPath, assetName) {
         try { file_delete({ path: zipPath }); } catch (e) { /* ignore */ }
 
         var output = cli_execute_command({
-            command: 'zip -r ' + zipPath + ' ' + folderPath
+            command: 'bash -c "zip -r ' + zipPath + ' ' + folderPath + '"'
         }) || '';
 
         // Verify the zip was actually created
-        var check = cli_execute_command({ command: 'test -f ' + zipPath + ' && echo exists' }) || '';
-        if (check.indexOf('exists') === -1) {
+        var check = cli_execute_command({ command: 'find ' + zipPath + ' -maxdepth 0 -type f 2>/dev/null' }) || '';
+        if (!check.trim()) {
             console.error('zip command ran but file not found at:', zipPath, 'output:', output.substring(0, 200));
             return null;
         }
@@ -103,8 +103,8 @@ function zipFolder(folderPath, assetName) {
  */
 function unzipTo(zipPath, destFolder) {
     try {
-        cli_execute_command({ command: 'mkdir -p ' + destFolder });
-        cli_execute_command({ command: 'unzip -o ' + zipPath + ' -d ' + destFolder });
+        cli_execute_command({ command: 'bash -c "mkdir -p ' + destFolder + '"' });
+        cli_execute_command({ command: 'bash -c "unzip -o ' + zipPath + ' -d ' + destFolder + '"' });
         console.log('✅ Unzipped', zipPath, '→', destFolder);
         return true;
     } catch (e) {
@@ -139,8 +139,8 @@ function uploadArtefact(owner, repo, ticketKey, releaseConfig, asset) {
 
     // Check folder exists
     try {
-        var folderCheck = cli_execute_command({ command: 'test -d ' + folderPath + ' && echo exists' }) || '';
-        if (folderCheck.indexOf('exists') === -1) {
+        var folderCheck = cli_execute_command({ command: 'find ' + folderPath + ' -maxdepth 0 -type d 2>/dev/null' }) || '';
+        if (!folderCheck.trim()) {
             console.warn('⚠️  Folder does not exist, skipping cache:', folderPath);
             return { success: false, error: 'Folder not found: ' + folderPath };
         }
@@ -246,8 +246,8 @@ function downloadArtefact(owner, repo, ticketKey, releaseConfig, asset) {
                      ' --clobber'
         });
 
-        var check = cli_execute_command({ command: 'test -f ' + zipPath + ' && echo exists' }) || '';
-        if (check.indexOf('exists') === -1) {
+        var check = cli_execute_command({ command: 'find ' + zipPath + ' -maxdepth 0 -type f 2>/dev/null' }) || '';
+        if (!check.trim()) {
             return { success: false, restored: false, error: 'Download produced no file at ' + zipPath };
         }
 
