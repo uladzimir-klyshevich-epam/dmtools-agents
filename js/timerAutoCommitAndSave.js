@@ -101,21 +101,16 @@ function autoCommitAndPush(customParams, ticketKey) {
 }
 
 /**
- * Save copilot session folder to releases as an artefact.
+ * Save CLI output snapshot to releases as an artefact.
  * The asset name includes the agent contextId to distinguish between agents.
  */
-function saveSessionArtefact(customParams, ticketKey, contextId) {
+function saveSessionArtefact(customParams, ticketKey, contextId, currentCliOutput) {
     var artefactRepo = releaseArtefacts.resolveArtefactRepository(customParams);
     if (!artefactRepo) {
         return;
     }
 
-    // Look for copilot session folder
-    var sessionFolder = 'input/' + ticketKey;
-    try {
-        cli_execute_command({ command: 'ls ' + sessionFolder });
-    } catch (e) {
-        // No session folder — skip
+    if (!currentCliOutput || !currentCliOutput.trim()) {
         return;
     }
 
@@ -126,22 +121,39 @@ function saveSessionArtefact(customParams, ticketKey, contextId) {
     var tag = releaseArtefacts.buildTag(ticketKey, tagTemplate);
     var releaseName = releaseArtefacts.buildReleaseName(ticketKey, nameTemplate);
 
-    // Zip the session folder
-    var zipPath = releaseArtefacts.zipFolder(sessionFolder, assetName);
-    if (!zipPath) {
+    // Write currentCliOutput to a temp file, then zip it
+    var outputFile = '/tmp/' + assetName + '-output.log';
+    try {
+        file_write({ path: outputFile, content: currentCliOutput });
+    } catch (e) {
+        console.error('⏱️ timer: failed to write CLI output file:', e.toString().substring(0, 100));
+        return;
+    }
+
+    var zipPath = '/tmp/' + assetName + '.zip';
+    try { file_delete({ path: zipPath }); } catch (e) { /* ignore */ }
+
+    try {
+        cli_execute_command({
+            command: 'bash -c "zip -j ' + zipPath + ' ' + outputFile + '"'
+        });
+    } catch (e) {
+        console.error('⏱️ timer: zip failed:', e.toString().substring(0, 100));
+        try { file_delete({ path: outputFile }); } catch (e2) { /* ignore */ }
         return;
     }
 
     // Upload to release
     try {
         releaseArtefacts.uploadArtefact(artefactRepo, tag, releaseName, zipPath, assetName + '.zip');
-        console.log('⏱️ timer: ✅ session artefact saved: ' + assetName + '.zip → ' + tag);
+        console.log('⏱️ timer: ✅ session saved: ' + assetName + '.zip → ' + tag);
     } catch (e) {
         console.error('⏱️ timer: session upload failed:', e.toString().substring(0, 150));
     }
 
-    // Cleanup zip
+    // Cleanup
     try { file_delete({ path: zipPath }); } catch (e) { /* ignore */ }
+    try { file_delete({ path: outputFile }); } catch (e) { /* ignore */ }
 }
 
 /**
@@ -151,6 +163,7 @@ function action(params) {
     var customParams = resolveCustomParams(params);
     var ticketKey = getTicketKey(params);
     var contextId = getContextId(params);
+    var currentCliOutput = params.currentCliOutput || '';
 
     if (!ticketKey) {
         console.log('⏱️ timer: no ticketKey available, skipping');
@@ -160,8 +173,8 @@ function action(params) {
     // 1. Auto-commit and push changes
     autoCommitAndPush(customParams, ticketKey);
 
-    // 2. Save session artefact to releases
-    saveSessionArtefact(customParams, ticketKey, contextId);
+    // 2. Save currentCliOutput to releases as session artefact
+    saveSessionArtefact(customParams, ticketKey, contextId, currentCliOutput);
 }
 
 module.exports = { action: action };
