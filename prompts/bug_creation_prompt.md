@@ -13,28 +13,21 @@ Read `input/ticket.md` to understand:
 - What the expected behavior is
 - What failed (the test case is in Failed status)
 
-## Step 2 — Review existing open bugs AND recently-fixed bugs
+## Step 2 — Review existing open bugs
 
 Read every file named `Bug *.md` in the input folder.
-Each file represents an open bug OR a recently-fixed bug (Done within the last 30 days).
+Each file represents an open bug with its key, summary, and description.
 
-If `input/no_open_bugs.md` exists — there are no open or recently-fixed bugs, skip to Step 3 directly.
+If `input/no_open_bugs.md` exists — there are no open bugs, skip to Step 3 directly.
 
 ### Matching criteria — treat as duplicate if ANY of the following:
-- The bug summary describes the **same component** (e.g., "workspace switcher", "startup probe") AND the **same failure symptom** (e.g., "closes", "does not render", "stays active")
+- The bug summary describes the **same component** AND the **same failure symptom**
 - The first 60 characters of the summaries are functionally identical (ignoring minor wording differences)
 - The bug description steps overlap ≥70% with the failed Test Case steps
-
-### Recently-fixed bugs (Done status) — regression handling
-If the matching bug has `status = Done` (it was fixed), this is a **regression**. Do NOT create a new duplicate bug. Instead:
-- Use `action: "link"` and reference the existing Done bug key
-- Explain in the reason: "This appears to be a regression of [KEY] which was previously fixed. Linking to track the regression."
 
 ## Step 3 — Make a decision
 
 **Case A — Matching open bug found**: If an existing open bug clearly describes the same underlying issue as this Test Case failure, link to it. Do NOT create duplicates.
-
-**Case A2 — Matching recently-fixed (Done) bug found**: If a recently-fixed bug (Done in the last 30 days) matches this failure, this is a regression. Link to it with a regression note. Do NOT create a new duplicate bug.
 
 **Case B — No match found**: Create a new bug ticket that describes the root cause of the test failure.
 
@@ -46,7 +39,7 @@ If the matching bug has `status = Done` (it was fixed), this is a **regression**
 
 Write `outputs/bug_decision.json` with exactly one of these formats:
 
-**Link to existing bug (open or regression):**
+**Link to existing bug:**
 ```json
 {
   "action": "link",
@@ -54,7 +47,6 @@ Write `outputs/bug_decision.json` with exactly one of these formats:
   "reason": "This bug describes the same issue: <brief explanation>"
 }
 ```
-*Use the same format for regressions — set reason to explain it is a regression of a previously-fixed bug.*
 
 **Create new bug:**
 ```json

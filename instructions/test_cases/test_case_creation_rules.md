@@ -91,6 +91,6 @@ For bug test case names use the format:
 ### Deduplication check (mandatory before creating)
 
 Before creating any test case (for bugs or stories), scan the existing test case list for semantic overlap:
-- If an existing TC verifies the same widget/component AND the same expected outcome → link it, skip creation.
-- If the existing TC summary shares the same subject + verb + component (e.g., "workspace switcher closes", "startup probe resolves") → link it, skip creation.
+- If an existing TC verifies the same component/feature AND the same expected outcome → link it, skip creation.
+- If the existing TC summary shares the same subject + verb + component → link it, skip creation.
 - When in doubt, link the closest existing TC and add a note explaining the overlap.
