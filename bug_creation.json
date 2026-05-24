@@ -29,7 +29,7 @@
     "preCliJSAction": "agents/js/prepareBugCreationContext.js",
     "postJSAction": "agents/js/postBugCreation.js",
     "customParams": {
-      "openBugsJql": "project = {jiraProject} AND issuetype in (Bug) AND status not in (Done)",
+      "openBugsJql": "project = {jiraProject} AND issuetype in (Bug) AND (status not in (Done) OR (status = Done AND updated >= -30d))",
       "removeLabel": "sm_bug_creation_triggered"
     },
     "inputJql": "key = JD-111",
