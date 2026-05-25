@@ -428,8 +428,12 @@ function processRuleLocally(rule, globalRepoInfo, ruleIndex) {
             fullTicket = (typeof ticketRaw === 'string') ? JSON.parse(ticketRaw) : ticketRaw;
             if (!fullTicket || !fullTicket.key) throw new Error('Empty ticket returned');
         } catch (e) {
-            console.error('  ❌ Failed to fetch ticket ' + key + ': ' + e);
-            return;
+            console.warn('  ⚠️  jira_get_ticket(' + key + ') failed (' + e + '), falling back to search-result data');
+            fullTicket = ticket;
+            if (!fullTicket || !fullTicket.key) {
+                console.error('  ❌ Search-result fallback also has no key for ' + key);
+                return;
+            }
         }
 
         try {
