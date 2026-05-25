@@ -110,7 +110,6 @@
           "configFile": "agents/bug_merged.json",
           "skipIfLabel": "sm_bug_merged_triggered",
           "enabled": true,
-          "limit": 1,
           "localExecution": true
         },
         {
