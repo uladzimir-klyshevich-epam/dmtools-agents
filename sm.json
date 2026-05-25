@@ -144,6 +144,12 @@
           "localExecution": true
         },
         {
+          "description": "Stuck In Development Test Cases → recover (check PR, route to Rework/Review/Backlog)",
+          "jql": "project = {jiraProject} AND issuetype in ('Test Case') AND status in ('In Development')",
+          "configFile": "agents/recover_stuck_test_case.json",
+          "localExecution": true
+        },
+        {
           "description": "In Rework Test Cases → trigger pr_test_automation_rework",
           "jql": "project = {jiraProject} AND issuetype in ('Test Case') AND status in ('In Rework')",
           "configFile": "agents/pr_test_automation_rework.json",
