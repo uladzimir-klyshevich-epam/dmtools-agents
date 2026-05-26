@@ -116,3 +116,5 @@ function action(params) {
     });
     return { success: true, action: 'moved_to_review', ticketKey: ticketKey, prNumber: pr.number };
 }
+
+module.exports = { action };
