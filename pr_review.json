@@ -32,8 +32,7 @@
     },
     "inputJql": "key = JD-107",
     "cliPrompts": [
-      "./agents/prompts/bash_tools.md",
-      "./agents/prompts/codegraph_tools.md"
+      "./agents/prompts/bash_tools.md"
     ]
   }
 }

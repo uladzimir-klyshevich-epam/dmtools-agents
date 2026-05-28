@@ -20,8 +20,7 @@
     },
     "inputJql": "key = PROJ-1",
     "cliPrompts": [
-      "./agents/prompts/bash_tools.md",
-      "./agents/prompts/codegraph_tools.md"
+      "./agents/prompts/bash_tools.md"
     ]
   }
 }

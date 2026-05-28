@@ -32,8 +32,7 @@
     "postJSAction": "agents/js/createQuestionsAndAssignForReview.js",
     "inputJql": "key = JD-82",
     "cliPrompts": [
-      "./agents/prompts/bash_tools.md",
-      "./agents/prompts/codegraph_tools.md"
+      "./agents/prompts/bash_tools.md"
     ]
   }
 }

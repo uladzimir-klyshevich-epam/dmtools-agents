@@ -31,8 +31,7 @@
     "postJSAction": "agents/js/createIntakeTickets.js",
     "inputJql": "key in (PROJ-357)",
     "cliPrompts": [
-      "./agents/prompts/bash_tools.md",
-      "./agents/prompts/codegraph_tools.md"
+      "./agents/prompts/bash_tools.md"
     ]
   }
 }

@@ -33,8 +33,7 @@
     "postJSAction": "agents/js/closeQuestionTicket.js",
     "inputJql": "key = JD-95",
     "cliPrompts": [
-      "./agents/prompts/bash_tools.md",
-      "./agents/prompts/codegraph_tools.md"
+      "./agents/prompts/bash_tools.md"
     ]
   }
 }
