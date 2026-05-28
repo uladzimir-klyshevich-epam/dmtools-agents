@@ -60,8 +60,13 @@ _cache_copilot() {
 
 _cache_codegraph() {
   local version="${1:-${CODEGRAPH_VERSION:-latest}}"
+  # Binary cache (~/.npm-global)
   export_var "CODEGRAPH_CACHE_PATH" "${HOME}/.npm-global"
   export_var "CODEGRAPH_CACHE_KEY"  "npm-global-codegraph-${version}-${OS_TAG}"
+  # Index cache (.codegraph/ in the workspace)
+  local workspace="${GITHUB_WORKSPACE:-${PWD}}"
+  export_var "CODEGRAPH_INDEX_CACHE_PATH" "${workspace}/.codegraph"
+  export_var "CODEGRAPH_INDEX_CACHE_KEY"  "codegraph-index-${OS_TAG}"
 }
 
 _cache_codemie() {
@@ -99,12 +104,14 @@ _print_info() {
   printf "│ %-11s │ %-32s │ %-46s │\n" "copilot"  "~/.npm-global"  "npm-global-copilot-latest-darwin-arm64"
   printf "│ %-11s │ %-32s │ %-46s │\n" "codemie"  "~/.local/bin"   "codemie-latest-linux-x86_64"
   printf "│ %-11s │ %-32s │ %-46s │\n" "cursor"   "(not cacheable)" "-"
-  printf "│ %-11s │ %-32s │ %-46s │\n" "codegraph" "~/.npm-global"  "npm-global-codegraph-latest-linux-x86_64"
+  printf "│ %-11s │ %-32s │ %-46s │\n" "codegraph" "~/.npm-global + .codegraph/" "npm-global-codegraph-latest-linux-x86_64"
   echo "└─────────────┴──────────────────────────────────┴────────────────────────────────────────────────┘"
   echo ""
   echo "Exported env vars per tool:"
-  echo "  {TOOL}_CACHE_PATH  — directory to cache"
-  echo "  {TOOL}_CACHE_KEY   — cache key string"
+  echo "  {TOOL}_CACHE_PATH        — directory to cache"
+  echo "  {TOOL}_CACHE_KEY         — cache key string"
+  echo "  CODEGRAPH_INDEX_CACHE_PATH — .codegraph/ index directory (codegraph only)"
+  echo "  CODEGRAPH_INDEX_CACHE_KEY  — cache key for the index (codegraph only)"
   echo ""
   echo "Usage in Bitrise YAML:"
   echo "  - script@1:"

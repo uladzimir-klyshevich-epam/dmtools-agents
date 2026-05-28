@@ -90,3 +90,30 @@ parse_tool_arg() {
   [ "${TOOL_VERSION}" = "${TOOL_NAME}" ] && TOOL_VERSION=""  # no colon → empty
 }
 
+# Auto-init or sync the CodeGraph index in the current git repository.
+# If .codegraph/ already exists (restored from cache) → sync.
+# If not → init non-interactively.
+# Skips silently if not inside a git repository or if codegraph is not installed.
+_codegraph_init_or_sync() {
+  local workspace="${GITHUB_WORKSPACE:-${PWD}}"
+
+  if ! command -v codegraph &>/dev/null; then
+    return 0
+  fi
+
+  if ! git -C "${workspace}" rev-parse --git-dir &>/dev/null 2>&1; then
+    echo "ℹ️  Not a git repository — skipping CodeGraph init"
+    return 0
+  fi
+
+  if [ -d "${workspace}/.codegraph" ]; then
+    echo "🔄 CodeGraph index found — syncing..."
+    codegraph sync "${workspace}" 2>/dev/null || true
+    echo "✅ CodeGraph index synced"
+  else
+    echo "🔨 Initializing CodeGraph index..."
+    codegraph init -i "${workspace}" 2>/dev/null || true
+    echo "✅ CodeGraph index initialized"
+  fi
+}
+

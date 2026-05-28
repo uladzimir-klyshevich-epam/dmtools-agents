@@ -27,6 +27,7 @@ if command -v codegraph &>/dev/null; then
   VER="$(codegraph --version 2>/dev/null || echo "${CODEGRAPH_VERSION}")"
   echo "✅ CodeGraph already installed (cache hit): ${VER}"
   register_path "${NPM_GLOBAL_BIN}"
+  _codegraph_init_or_sync
   exit 0
 fi
 
@@ -41,3 +42,6 @@ fi
 
 register_path "${NPM_GLOBAL_BIN}"
 echo "✅ CodeGraph $(codegraph --version 2>/dev/null || echo "${CODEGRAPH_VERSION}")"
+
+# ── Auto-init or sync index if inside a git repository ────────────────────────
+_codegraph_init_or_sync
