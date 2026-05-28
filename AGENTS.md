@@ -96,11 +96,30 @@ Use `js/common/scm.js` (via `configLoader.createScm(config)`) instead of calling
 
 ### Config composition
 Project repos customize agent behavior through `.dmtools/config.js` fields:
-- `cliPrompts.<contextId>` — append prompt files
-- `cliPromptOverrides.<contextId>` — replace the entry prompt
-- `additionalInstructions.<contextId>` — append to agentParams.instructions
-- `instructionOverrides.<contextId>` — replace agentParams.instructions
-- `agentParamPatches.<contextId>` — patch agentParams fields
+- `cliPrompts.<contextId>` — append prompt files to a specific agent's CLI input
+- `cliPromptOverrides.<contextId>` — replace the entry prompt for a specific agent
+- `additionalInstructions.<contextId>` — append to `agentParams.instructions` for a specific agent
+- `instructionOverrides.<contextId>` — replace `agentParams.instructions` for a specific agent
+- `agentParamPatches.<contextId>` — patch `agentParams` fields for a specific agent
+- `globalCliPrompts` — prompt files appended to **every** agent's CLI input (inject-to-all)
+- `globalAdditionalInstructions` — instruction files appended to **every** agent's `agentParams.instructions`
+
+**Example — inject codegraph into all agents without repeating per context:**
+```js
+// .dmtools/config.js
+module.exports = {
+    globalCliPrompts: [
+        './agents/instructions/common/codegraph_tools.md'
+    ],
+    cliPrompts: {
+        story_development: ['./.dmtools/prompts/development_focus.md'],
+        pr_review:         ['./.dmtools/prompts/review_focus.md']
+        // codegraph_tools.md is injected automatically into all agents above
+    }
+};
+```
+
+Global entries are merged **after** per-agent entries so they always appear last.
 
 ### Output JSON discipline
 When agents produce JSON output files, keep them compact (status, IDs, paths, short summaries). Put large text in separate `.md` files and reference them by path.
