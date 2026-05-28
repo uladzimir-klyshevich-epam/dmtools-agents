@@ -14,7 +14,8 @@
  *   - smRules, smMergeRules: FULL REPLACEMENT when provided
  *   - repository, git, formats, confluence, jira.fields: DEEP MERGE
  *   - additionalInstructions, instructionOverrides, cliPrompts, cliPromptOverrides, agentParamPatches, jobParamPatches:
- *     FULL REPLACEMENT when provided
+ *     FULL REPLACEMENT when provided (per agent key)
+ *   - globalCliPrompts, globalAdditionalInstructions: APPENDED to every agent (inject-to-all)
  */
 
 var DEFAULT_CONFIG = require('./config.js');
@@ -104,6 +105,11 @@ var DEFAULTS = {
     cliPromptOverrides: {},
     agentParamPatches: {},
     jobParamPatches: {},
+
+    // Injected into every agent without repeating per-context.
+    // Merged AFTER per-agent entries so global items always appear last.
+    globalCliPrompts: [],
+    globalAdditionalInstructions: [],
 
     scm: {
         provider: 'github'   // 'github' | 'ado' — source control provider for PR operations
@@ -501,9 +507,17 @@ function resolveInstructions(agentName, defaultInstructions, config) {
     if (config.additionalInstructions && config.additionalInstructions[agentName]) {
         additional = config.additionalInstructions[agentName];
     }
+    // Global additional instructions injected into every agent
+    if (config.globalAdditionalInstructions && config.globalAdditionalInstructions.length > 0) {
+        additional = additional.concat(config.globalAdditionalInstructions);
+    }
 
     if (config.cliPrompts && config.cliPrompts[agentName]) {
         cliPrompts = config.cliPrompts[agentName];
+    }
+    // Global CLI prompts injected into every agent
+    if (config.globalCliPrompts && config.globalCliPrompts.length > 0) {
+        cliPrompts = cliPrompts.concat(config.globalCliPrompts);
     }
 
     if (config.cliPromptOverrides && config.cliPromptOverrides[agentName]) {
