@@ -12,14 +12,16 @@ Read `input/failed_tcs.json`. It contains an array of failed Test Case objects, 
 
 The `lastComment` is the **primary source** for bug description — it contains the latest run result.
 
-## Step 2 — Read existing open bugs
+## Step 2 — Read existing bugs (open and recently fixed)
 
-Read `input/open_bugs.json`. It contains an array of open bug objects, each with:
+Read `input/open_bugs.json`. It contains an array of **open** bug objects, each with:
 - `key` — existing bug key
 - `summary` — bug summary
 - `description` — bug description
 
-### Duplicate matching rules (treat as duplicate if ANY of the following):
+Read `input/done_bugs.json`. It contains an array of **recently fixed (Done)** bug objects with the same fields. Use these to detect TCs whose underlying bug has already been resolved.
+
+### Duplicate / match rules (treat as match if ANY of the following):
 - Same component AND same failure symptom
 - First 60 characters of summaries are functionally identical
 - Bug description steps overlap ≥70% with the TC steps
@@ -28,11 +30,17 @@ Read `input/open_bugs.json`. It contains an array of open bug objects, each with
 
 For each failed TC, decide one of:
 
-**A — Link to existing bug**: A clearly matching open bug already exists.
+**A — Link to existing open bug**: A clearly matching **open** bug already exists. The TC will be moved to "Bug To Fix" to wait for the fix.
 
-**B — Create new bug**: No matching bug exists. If multiple TCs share the same root cause, group them under ONE new bug.
+**B — Create new bug**: No matching bug exists. If multiple TCs share the same root cause, group them under ONE new bug. The TC will be moved to "Bug To Fix".
 
-**C — Skip**: The TC failed due to a test code issue (not an application bug), or the most recent run actually passed.
+**C — Already fixed by a Done bug**: A matching bug exists in `input/done_bugs.json` that has already been fixed. The TC will be moved to "Backlog" for re-automation against the fixed code.
+
+**D — Skip (test code issue)**: The TC failed due to a test code issue (flaky selector, test environment problem, outdated test assertion), NOT an application bug. **You MUST provide a detailed reason** explaining exactly what test code issue caused the failure and why it is not an application bug. The TC will remain in "Failed" for the next review cycle.
+
+### IMPORTANT: Prefer creating a bug over skipping
+- If you are unsure whether the failure is a test issue or an app bug, **create a bug** (option B). It is better to over-report than to leave a TC stuck in Failed with no action.
+- Only use Skip (option D) when you are confident the failure is purely a test infrastructure or test code problem.
 
 ### Grouping rules:
 - TCs that test the same UI component and fail with the same symptom → group under one bug
@@ -46,7 +54,7 @@ For each failed TC, decide one of:
 Write a JSON object with this structure:
 ```json
 {
-  "processed": ["TS-984", "TS-954", "TS-909"],
+  "processed": ["TS-984", "TS-954", "TS-909", "TS-800"],
   "newBugs": [
     {
       "summary": "Concise bug title describing component and symptom",
@@ -61,10 +69,17 @@ Write a JSON object with this structure:
       "bugKey": "TS-123"
     }
   ],
+  "fixedByBug": [
+    {
+      "tcKey": "TS-800",
+      "bugKey": "TS-050",
+      "reason": "Bug TS-050 fixed the same component validation logic — TC should pass now"
+    }
+  ],
   "skipped": [
     {
       "tcKey": "TS-YYY",
-      "reason": "Brief explanation why no bug is needed"
+      "reason": "Detailed explanation of exactly what test code issue caused the failure (e.g., flaky CSS selector '.btn-primary' no longer matches after UI refactor, test assertion checks wrong element)"
     }
   ]
 }
@@ -72,7 +87,9 @@ Write a JSON object with this structure:
 
 **Rules for `bulk_bug_decisions.json`:**
 - `processed` MUST include the key of every TC you made a decision for
-- Every TC from `input/failed_tcs.json` MUST appear in exactly one of: `newBugs[].linkedTCs`, `links`, or `skipped`
+- Every TC from `input/failed_tcs.json` MUST appear in exactly one of: `newBugs[].linkedTCs`, `links`, `fixedByBug`, or `skipped`
+- `fixedByBug` is for TCs matched to a **Done** bug from `input/done_bugs.json` — these TCs will be moved to Backlog for re-automation
+- `skipped[].reason` MUST be a detailed explanation (not just "test issue") — explain the specific test code problem
 - `priority` must be one of: `Highest`, `High`, `Medium`, `Low`, `Lowest`
 - `descriptionFile` must reference a file you actually write (see below)
 - Do NOT embed multi-line description text inside this JSON

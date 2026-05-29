@@ -110,6 +110,40 @@ function action(params) {
             console.log('Wrote input/open_bugs.json with ' + bugList.length + ' bugs');
         }
 
+        // Fetch recently Done bugs (for "already fixed" detection)
+        var doneBugsJql = (customParams.doneBugsJql ||
+            'project = {jiraProject} AND issuetype in (Bug) AND status in (Done) ORDER BY updated DESC')
+            .replace('{jiraProject}', projectKey);
+
+        console.log('Fetching done bugs with JQL:', doneBugsJql);
+        var doneBugs = [];
+        try {
+            var doneResults = jira_search_by_jql({
+                jql: doneBugsJql,
+                fields: ['key', 'summary', 'description', 'status', 'priority'],
+                maxResults: 100
+            });
+            doneBugs = doneResults || [];
+        } catch (e) {
+            console.error('Failed to fetch done bugs:', e);
+        }
+
+        console.log('Found ' + doneBugs.length + ' done bug(s)');
+
+        var doneBugList = doneBugs.map(function(bug) {
+            var fields = bug.fields || {};
+            return {
+                key: bug.key,
+                summary: fields.summary || '',
+                description: (fields.description || '').substring(0, 500),
+                status: fields.status ? fields.status.name : '',
+                priority: fields.priority ? fields.priority.name : ''
+            };
+        });
+
+        file_write(inputFolder + '/done_bugs.json', JSON.stringify(doneBugList, null, 2));
+        console.log('Wrote input/done_bugs.json with ' + doneBugList.length + ' bugs');
+
         // Write context summary for the AI
         var contextMd = '# Bulk Bug Creation Context\n\n' +
             '- **Project**: ' + projectKey + '\n' +

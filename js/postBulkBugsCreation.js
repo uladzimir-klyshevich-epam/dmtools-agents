@@ -147,9 +147,11 @@ function action(params) {
         var processed = decisions.processed || [];
         var newBugs = decisions.newBugs || [];
         var links = decisions.links || [];
+        var fixedByBug = decisions.fixedByBug || [];
         var skipped = decisions.skipped || [];
 
-        console.log('Decisions: ' + newBugs.length + ' new bugs, ' + links.length + ' links, ' + skipped.length + ' skipped');
+        console.log('Decisions: ' + newBugs.length + ' new bugs, ' + links.length + ' links, ' +
+            fixedByBug.length + ' fixed by done bug, ' + skipped.length + ' skipped');
         console.log('Processed TCs: ' + processed.join(', '));
 
         var results = { created: [], linked: [], skipped: [], errors: [] };
@@ -253,7 +255,52 @@ function action(params) {
             }
         });
 
-        // ── 3. Mark skipped TCs (keep in Failed, add trigger label) ──────────
+        // ── 3. Handle TCs fixed by Done bugs → Backlog ────────────────────
+        var fixedByBug = decisions.fixedByBug || [];
+        fixedByBug.forEach(function(fixDef) {
+            var tcKey = fixDef.tcKey;
+            var bugKey = fixDef.bugKey;
+
+            if (!tcKey) return;
+            if (!processedSet[tcKey]) {
+                console.warn('  ⚠️ TC', tcKey, 'not in processed list — skipping (safety guard)');
+                return;
+            }
+
+            console.log('  Fixed by Done bug:', tcKey, '→', bugKey || 'unknown');
+            try {
+                if (bugKey) {
+                    linkBugToTC(tcKey, bugKey);
+                }
+                // Move to Backlog for re-automation against fixed code
+                try {
+                    jira_move_to_status({ key: tcKey, statusName: 'Backlog' });
+                    console.log('  📋 Moved to Backlog:', tcKey);
+                } catch (e) {
+                    console.warn('  ⚠️ Could not move to Backlog:', tcKey, e);
+                }
+                // Remove test automation label so SM can re-trigger automation
+                try {
+                    jira_remove_label({ key: tcKey, label: 'sm_test_automation_triggered' });
+                } catch (e) {}
+                // Remove bug creation trigger label
+                try {
+                    jira_remove_label({ key: tcKey, label: triggerLabel });
+                } catch (e) {}
+                postComment(tcKey,
+                    'h3. 🔄 Bug Already Fixed — Ready for Re-automation\n\n' +
+                    (bugKey ? 'Matching bug *' + bugKey + '* is already in *Done* status.\n\n' : '') +
+                    (fixDef.reason || 'The underlying bug has been fixed.') +
+                    '\n\n_TC moved to *Backlog* for re-automation against the fixed code._'
+                );
+                results.created.push({ tcKey: tcKey, bugKey: bugKey || 'done', action: 'fixed_by_bug' });
+            } catch (e) {
+                console.error('  ❌ Failed to process fixed TC', tcKey, ':', e);
+                results.errors.push({ tcKey: tcKey, bugKey: bugKey, error: e.toString() });
+            }
+        });
+
+        // ── 4. Mark skipped TCs (keep in Failed, REMOVE trigger label for retry) ─
         skipped.forEach(function(skipDef) {
             var tcKey = skipDef.tcKey;
             if (!tcKey) return;
@@ -263,11 +310,16 @@ function action(params) {
             }
 
             console.log('  Skipping', tcKey, '—', skipDef.reason || 'no reason given');
-            addTriggerLabel(tcKey, triggerLabel);
+            // REMOVE trigger label so SM can retry on next cycle
+            // (prevents permanent deadlock in Failed status)
+            try {
+                jira_remove_label({ key: tcKey, label: triggerLabel });
+                console.log('  🏷️ Removed trigger label from', tcKey, '— eligible for next cycle');
+            } catch (e) {}
             postComment(tcKey,
-                'h3. ℹ️ No Bug Created (Batch)\n\n' +
-                (skipDef.reason || 'AI determined no bug creation is required.') +
-                '\n\n_TC remains in Failed status._'
+                'h3. ℹ️ No Bug Created (Batch) — Test Code Issue\n\n' +
+                '*Reason*: ' + (skipDef.reason || 'AI determined this is a test code issue, not an application bug.') +
+                '\n\n_TC remains in Failed status. Trigger label removed — will be re-evaluated on next cycle._'
             );
             results.skipped.push({ tcKey: tcKey, reason: skipDef.reason });
         });
