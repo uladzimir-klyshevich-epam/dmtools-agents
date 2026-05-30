@@ -112,12 +112,8 @@ function removeProcessingLabels(tcKey, labels) {
 }
 
 function moveFailedTcToRework(tcKey) {
-    try {
-        jira_move_to_status({ key: tcKey, statusName: STATUSES.IN_REWORK || 'In Rework' });
-        console.log('  🔧 Moved to ' + (STATUSES.IN_REWORK || 'In Rework') + ':', tcKey);
-    } catch (e) {
-        console.warn('  ⚠️ Could not move to In Rework:', tcKey, e);
-    }
+    jira_move_to_status({ key: tcKey, statusName: STATUSES.IN_REWORK || 'In Rework' });
+    console.log('  🔧 Moved to ' + (STATUSES.IN_REWORK || 'In Rework') + ':', tcKey);
     try {
         jira_remove_label({ key: tcKey, label: 'sm_test_automation_triggered' });
     } catch (e) {}

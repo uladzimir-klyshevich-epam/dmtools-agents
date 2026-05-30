@@ -178,6 +178,12 @@
           "addLabel": "sm_test_automation_triggered"
         },
         {
+          "description": "Failed Test Cases with linked Bugs → recover Bug To Fix",
+          "jql": "project = {jiraProject} AND issuetype in ('Test Case') AND status in ('Failed') ORDER BY updated ASC",
+          "configFile": "agents/recover_failed_tc_bug_status.json",
+          "localExecution": true
+        },
+        {
           "description": "Failed Test Cases → create or link bug (single, disabled by default — use bulk_bugs_creation instead)",
           "jql": "project = {jiraProject} AND issuetype in ('Test Case') AND status in ('Failed')",
           "configFile": "agents/bug_creation.json",

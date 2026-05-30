@@ -61,12 +61,8 @@ function linkBugToTC(ticketKey, bugKey) {
 }
 
 function moveFailedTcToRework(ticketKey) {
-    try {
-        jira_move_to_status({ key: ticketKey, statusName: STATUSES.IN_REWORK || 'In Rework' });
-        console.log('🔧 Moved', ticketKey, 'to', STATUSES.IN_REWORK || 'In Rework');
-    } catch (e) {
-        console.warn('Failed to move to In Rework:', e);
-    }
+    jira_move_to_status({ key: ticketKey, statusName: STATUSES.IN_REWORK || 'In Rework' });
+    console.log('🔧 Moved', ticketKey, 'to', STATUSES.IN_REWORK || 'In Rework');
     try {
         jira_remove_label({ key: ticketKey, label: 'sm_test_automation_triggered' });
         console.log('✅ Removed sm_test_automation_triggered');
