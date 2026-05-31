@@ -86,6 +86,37 @@ suite('autoStart helper', function() {
         assert.equal(triggeredPayload.ref, 'main');
     });
 
+    test('skips trigger when global active workflow cap is reached', function() {
+        var triggered = false;
+        var autoStart = loadAutoStartHelper({
+            github_list_workflow_runs: function(workspace, repository, status) {
+                if (status === 'in_progress') {
+                    return JSON.stringify({
+                        workflow_runs: [{
+                            id: 9001,
+                            name: 'agents/pr_rework.json : TS-91',
+                            status: 'in_progress'
+                        }]
+                    });
+                }
+                return JSON.stringify({ workflow_runs: [] });
+            },
+            github_trigger_workflow: function() {
+                triggered = true;
+            }
+        });
+
+        var result = autoStart.triggerConfiguredWorkflowForTicket({
+            ticketKey: 'TS-90',
+            config: { repository: { owner: 'IstiN', repo: 'trackstate' }, smMaxWorkflows: 1 },
+            customParams: {},
+            configFile: 'agents/pr_review.json'
+        });
+
+        assert.equal(result, false);
+        assert.equal(triggered, false, 'global cap should prevent follow-up auto-starts');
+    });
+
 });
 
 suite('triggerSmIfIdle', function() {

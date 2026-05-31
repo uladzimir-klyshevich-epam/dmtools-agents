@@ -13,30 +13,6 @@ var autoStart = require('./common/autoStart.js');
 const { GIT_CONFIG, STATUSES, LABELS, resolveStatuses } = require('./config.js');
 var cacheToReleases = require('./cacheToReleases.js');
 
-function deriveProjectKey(customParams) {
-    if (!customParams) return '';
-    if (customParams.projectKey) return customParams.projectKey;
-    var cp = customParams.configPath || '';
-    if (!cp) return '';
-    var base = cp.substring(cp.lastIndexOf('/') + 1).replace(/\.js$/, '');
-    return (base && base !== 'config') ? base : '';
-}
-
-function buildAutoStartEncodedConfig(ticketKey, customParams) {
-    var p = { inputJql: 'key = ' + ticketKey };
-    if (customParams) {
-        // Pass the full customParams to the next agent so it has all config
-        // (autoStartReworkConfigFile, customStatuses, targetRepository, etc.)
-        // Strip fields that are only relevant to the current agent's execution.
-        var nextCustomParams = Object.assign({}, customParams);
-        delete nextCustomParams.removeLabel;   // SM idempotency label — per-agent, not inherited
-        delete nextCustomParams.autoStartReview;             // dev → review trigger, not needed downstream
-        delete nextCustomParams.autoStartReviewConfigFile;   // same
-        p.customParams = nextCustomParams;
-    }
-    return encodeURIComponent(JSON.stringify({ params: p }));
-}
-
 function hasPrApprovedLabel(ticket) {
     var labels = (ticket && ticket.fields && ticket.fields.labels) ? ticket.fields.labels : [];
     return labels.indexOf(LABELS.PR_APPROVED) !== -1;
@@ -980,29 +956,18 @@ function action(params) {
                 console.log('ℹ️ autoStartReview: skipped — ticket has pr_approved label');
             } else {
                 try {
-                    // Use customParams.aiRepository if set (avoids targetRepository override in configLoader)
-                    const aiRepoCfg = customParams && customParams.aiRepository;
-                    const aiOwner = (aiRepoCfg && aiRepoCfg.owner) || (config.repository && config.repository.owner);
-                    const aiRepo  = (aiRepoCfg && aiRepoCfg.repo)  || (config.repository && config.repository.repo);
-                    const projectKey = deriveProjectKey(customParams);
-                    const encodedCfg = buildAutoStartEncodedConfig(ticketKey, customParams);
-                    if (aiOwner && aiRepo) {
-                        github_trigger_workflow(
-                            aiOwner, aiRepo, 'ai-teammate.yml',
-                            JSON.stringify({
-                                concurrency_key: ticketKey,
-                                config_file:     reviewConfigFile,
-                                encoded_config:  encodedCfg,
-                                project_key:     projectKey || ''
-                            }),
-                            'main'
-                        );
-                        reviewStarted = true;
-                        console.log('✅ Auto-started pr_review for', ticketKey,
-                            '[config=' + reviewConfigFile + (projectKey ? ', project=' + projectKey : '') + ']');
-                    } else {
-                        console.warn('⚠️ autoStartReview: config.repository.owner/repo not set — skipping');
-                    }
+                    reviewStarted = autoStart.triggerConfiguredWorkflowForTicket({
+                        ticketKey: ticketKey,
+                        customParams: customParams,
+                        config: config,
+                        configFile: reviewConfigFile,
+                        label: 'pr_review',
+                        stripKeys: [
+                            'removeLabel',
+                            'autoStartReview',
+                            'autoStartReviewConfigFile'
+                        ]
+                    });
                 } catch (e) {
                     console.warn('⚠️ autoStartReview trigger failed:', e.message || e);
                 }

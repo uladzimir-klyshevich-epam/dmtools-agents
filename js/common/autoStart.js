@@ -65,6 +65,60 @@ function hasActiveTargetRun(scm, configFile, ticketKey, workflowFile) {
     return false;
 }
 
+function normalizePositiveInt(value) {
+    if (typeof value !== 'number' || !isFinite(value)) return null;
+    var normalized = Math.floor(value);
+    return normalized > 0 ? normalized : null;
+}
+
+function countActiveWorkflowRuns(scm, workflowFile) {
+    var statuses = ['queued', 'in_progress', 'waiting', 'pending'];
+    var seen = {};
+    var count = 0;
+
+    for (var i = 0; i < statuses.length; i++) {
+        var runsRaw = null;
+        try {
+            runsRaw = scm.listWorkflowRuns(statuses[i], workflowFile, 50);
+        } catch (e) {
+            console.warn('autoStart: could not count ' + statuses[i] + ' workflow runs:', e.message || e);
+            continue;
+        }
+
+        var runs = parseWorkflowRuns(runsRaw);
+        for (var j = 0; j < runs.length; j++) {
+            var run = runs[j] || {};
+            var id = run.id || run.databaseId || run.run_number || ((run.display_title || run.displayTitle || run.name || '') + ':' + j + ':' + statuses[i]);
+            if (!seen[id]) {
+                seen[id] = true;
+                count += 1;
+            }
+        }
+    }
+
+    return count;
+}
+
+function resolveActiveWorkflowCap(options) {
+    var explicitCap = normalizePositiveInt(options.maxActiveWorkflows);
+    if (explicitCap) return explicitCap;
+    return normalizePositiveInt(options.config && options.config.smMaxWorkflows);
+}
+
+function isGlobalWorkflowCapReached(scm, workflowFile, options) {
+    var cap = resolveActiveWorkflowCap(options || {});
+    if (!cap) return false;
+
+    var activeCount = countActiveWorkflowRuns(scm, workflowFile);
+    if (activeCount >= cap) {
+        console.log('autoStart: skipped workflow trigger because ' + activeCount +
+            ' active workflow run(s) reached global cap ' + cap);
+        return true;
+    }
+
+    return false;
+}
+
 function triggerConfiguredWorkflowForTicket(options) {
     var ticketKey = options.ticketKey;
     var customParams = options.customParams || {};
@@ -92,6 +146,13 @@ function triggerConfiguredWorkflowForTicket(options) {
     var scm = options.scm || scmModule.createScm(config);
     var projectKey = deriveProjectKey(customParams);
     var encodedCfg = buildAutoStartEncodedConfig(ticketKey, customParams, stripKeys);
+
+    if (isGlobalWorkflowCapReached(scm, workflowFile, {
+            config: config,
+            maxActiveWorkflows: options.maxActiveWorkflows
+        })) {
+        return false;
+    }
 
     if (hasActiveTargetRun(scm, configFile, ticketKey, workflowFile)) {
         return false;
@@ -182,5 +243,7 @@ module.exports = {
     buildAutoStartEncodedConfig: buildAutoStartEncodedConfig,
     triggerConfiguredWorkflowForTicket: triggerConfiguredWorkflowForTicket,
     hasActiveTargetRun: hasActiveTargetRun,
+    countActiveWorkflowRuns: countActiveWorkflowRuns,
+    isGlobalWorkflowCapReached: isGlobalWorkflowCapReached,
     triggerSmIfIdle: triggerSmIfIdle
 };
