@@ -40,6 +40,7 @@ function parseWorkflowRuns(raw) {
 
 function hasActiveTargetRun(scm, configFile, ticketKey, workflowFile) {
     var expectedName = configFile + ' : ' + ticketKey;
+    var expectedNameSuffix = ' : ' + ticketKey;
     var statuses = ['queued', 'in_progress', 'waiting', 'pending'];
 
     for (var i = 0; i < statuses.length; i++) {
@@ -56,7 +57,10 @@ function hasActiveTargetRun(scm, configFile, ticketKey, workflowFile) {
             var run = runs[j] || {};
             if (isStaleNonRunningWorkflowRun(run, statuses[i])) continue;
             var name = run.display_title || run.displayTitle || run.name || '';
-            if (name === expectedName) {
+            var matchesOldName = name === expectedName;
+            var matchesDisplayName = name.indexOf(configFile + ' : ') === 0 &&
+                name.substring(name.length - expectedNameSuffix.length) === expectedNameSuffix;
+            if (matchesOldName || matchesDisplayName) {
                 console.log('autoStart: skipped duplicate ' + expectedName + ' because run #' +
                     (run.run_number || run.runNumber || run.id || '?') + ' is ' + (run.status || statuses[i]));
                 return true;
@@ -181,6 +185,7 @@ function triggerConfiguredWorkflowForTicket(options) {
         workflowFile,
         JSON.stringify({
             concurrency_key: ticketKey,
+            display_key: ticketKey,
             config_file: configFile,
             encoded_config: encodedCfg,
             project_key: projectKey || ''

@@ -28,7 +28,7 @@ suite('autoStart helper', function() {
                 if (status === 'in_progress') {
                     return JSON.stringify({
                         workflow_runs: [{
-                            name: 'agents/pr_test_automation_rework.json : TS-90',
+                            name: 'agents/pr_test_automation_rework.json : TS-90 : TS-90',
                             status: 'in_progress',
                             run_number: 584
                         }]
@@ -82,6 +82,7 @@ suite('autoStart helper', function() {
         assert.equal(triggeredPayload.repo, 'trackstate');
         assert.equal(triggeredPayload.workflowFile, 'ai-teammate.yml');
         assert.equal(triggeredPayload.payload.concurrency_key, 'TS-90');
+        assert.equal(triggeredPayload.payload.display_key, 'TS-90');
         assert.equal(triggeredPayload.payload.config_file, 'agents/pr_test_automation_rework.json');
         assert.equal(triggeredPayload.ref, 'main');
     });

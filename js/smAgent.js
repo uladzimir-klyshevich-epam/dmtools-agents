@@ -222,6 +222,7 @@ function hasActiveTargetWorkflowRun(scm, workflowFile, configFile, ticketKey) {
     if (!scm || typeof scm.listWorkflowRuns !== 'function') return false;
 
     var expectedRunName = configFile + ' : ' + ticketKey;
+    var expectedRunNameSuffix = ' : ' + ticketKey;
     var statuses = ['queued', 'in_progress', 'waiting', 'pending'];
 
     for (var i = 0; i < statuses.length; i++) {
@@ -237,7 +238,10 @@ function hasActiveTargetWorkflowRun(scm, workflowFile, configFile, ticketKey) {
             var run = runs[j] || {};
             if (isStaleNonRunningWorkflowRun(run, statuses[i])) continue;
             var runName = run.name || run.display_title || '';
-            if (runName === expectedRunName) {
+            var matchesOldName = runName === expectedRunName;
+            var matchesDisplayName = runName.indexOf(configFile + ' : ') === 0 &&
+                runName.substring(runName.length - expectedRunNameSuffix.length) === expectedRunNameSuffix;
+            if (matchesOldName || matchesDisplayName) {
                 console.log('  ⏭️  ' + ticketKey + ' skipped (active workflow already exists: ' + expectedRunName + ')');
                 return true;
             }
@@ -346,6 +350,7 @@ function triggerWorkflow(repoInfo, ticketKey, rule, effectiveConfig, workflowBud
             workflowFile,
             JSON.stringify({
                 concurrency_key: concurrencyKey,
+                display_key:     ticketKey,
                 input_jql:       'key = ' + ticketKey,
                 config_file:     resolvedCf,
                 encoded_config:  buildEncodedConfig(ticketKey, rule, effectiveConfig),

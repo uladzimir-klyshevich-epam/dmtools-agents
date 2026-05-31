@@ -499,6 +499,7 @@ suite('smAgent: ticket dispatch', function() {
         assert.equal(sm.capturedTriggers.length, 1);
         var inputs = JSON.parse(sm.capturedTriggers[0].inputs);
         assert.equal(inputs.concurrency_key, 'P-42', 'concurrency key set to ticket key');
+        assert.equal(inputs.display_key, 'P-42', 'workflow display key set to ticket key');
         assert.equal(inputs.input_jql, 'key = P-42', 'workflow input JQL set to ticket key');
         assert.equal(inputs.config_file, 'agents/story_development.json', 'config_file passed');
         assert.ok(inputs.encoded_config, 'encoded_config present');
@@ -523,6 +524,7 @@ suite('smAgent: ticket dispatch', function() {
         assert.equal(sm.capturedTriggers.length, 1);
         var inputs = JSON.parse(sm.capturedTriggers[0].inputs);
         assert.equal(inputs.concurrency_key, 'bulk_bugs_creation', 'rule concurrency key used');
+        assert.equal(inputs.display_key, 'P-42', 'workflow display key preserves ticket key');
         assert.equal(inputs.input_jql, 'key = P-42', 'workflow input JQL remains ticket-specific');
 
         var decoded = JSON.parse(decodeURIComponent(inputs.encoded_config));
@@ -739,7 +741,7 @@ suite('smAgent: skipIfLabel', function() {
             workflowRuns: {
                 queued: [
                     {
-                        display_title: 'agents/bulk_bugs_creation.json : bulk_bugs_creation',
+                        display_title: 'agents/bulk_bugs_creation.json : T-1 : bulk_bugs_creation',
                         status: 'queued'
                     }
                 ],
