@@ -32,6 +32,25 @@ if [ $# -lt 1 ]; then
   exit 1
 fi
 
+record_codegraph_usage() {
+  local log_file="$1"
+  if [ ! -s "$log_file" ]; then
+    return 0
+  fi
+
+  local matches
+  matches="$(grep -E '(^|[[:space:];|&])codegraph[[:space:]]+(context|query|callees|callers|impact|node|files|sync|affected|status)([[:space:]]|$)' "$log_file" || true)"
+  if [ -z "$matches" ]; then
+    return 0
+  fi
+
+  mkdir -p .dmtools
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    printf '%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$line" >> .dmtools/codegraph-usage.log
+  done <<< "$matches"
+}
+
 # --skip: print prompt and exit without running any agent (for post-action testing)
 for arg in "$@"; do
   if [ "$arg" = "--skip" ]; then
@@ -211,6 +230,7 @@ elif [ "$PROVIDER" = "copilot" ]; then
     set -e
 
     if [ "$exit_code" -eq 0 ]; then
+      record_codegraph_usage "$copilot_log"
       rm -f "$copilot_log"
       break
     fi
@@ -218,6 +238,7 @@ elif [ "$PROVIDER" = "copilot" ]; then
     if [ "$exit_code" -eq 124 ]; then
       echo ""
       echo "Copilot command timed out after ${COPILOT_COMMAND_TIMEOUT_SECONDS:-1200}s; exiting so DMTools post-action can recover/reset the ticket."
+      record_codegraph_usage "$copilot_log"
       rm -f "$copilot_log"
       break
     fi
@@ -225,12 +246,14 @@ elif [ "$PROVIDER" = "copilot" ]; then
     if grep -Eiq "rate limit|limit reset|You've hit your rate limit" "$copilot_log" && [ "$attempt" -lt "$max_attempts" ]; then
       echo ""
       echo "Copilot rate limit detected; retrying in ${retry_delay}s (attempt $((attempt + 1))/${max_attempts})"
+      record_codegraph_usage "$copilot_log"
       rm -f "$copilot_log"
       sleep "$retry_delay"
       attempt=$((attempt + 1))
       continue
     fi
 
+    record_codegraph_usage "$copilot_log"
     rm -f "$copilot_log"
     break
   done
@@ -265,9 +288,13 @@ echo "Running: ${CMD[*]}"
 echo ""
 
 # Execute Command
-"${CMD[@]}"
-
-exit_code=$?
+agent_log="$(mktemp)"
+set +e
+"${CMD[@]}" 2>&1 | tee "$agent_log"
+exit_code=${PIPESTATUS[0]}
+set -e
+record_codegraph_usage "$agent_log"
+rm -f "$agent_log"
 
 echo ""
 echo "=== Agent completed with exit code: $exit_code ==="
