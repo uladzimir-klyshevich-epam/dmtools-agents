@@ -292,6 +292,7 @@ function groupBy(rows, keyFn) {
         item.avgReasoningTokens = item.runs ? Math.round(item.reasoningTokens / item.runs) : 0;
         item.avgDurationSeconds = item.durationRuns ? Math.round(item.durationSeconds / item.durationRuns) : 0;
         item.avgDuration = formatDuration(item.avgDurationSeconds);
+        item.totalDuration = formatDuration(item.durationSeconds);
         return item;
     });
 }
@@ -324,6 +325,60 @@ function calculateDurationSeconds(run) {
     return Math.round((endMs - startMs) / 1000);
 }
 
+function calculateRunnerStats(rows) {
+    var intervals = [];
+    var totalSeconds = 0;
+    rows.forEach(function(row) {
+        var durationSeconds = row.durationSeconds || 0;
+        totalSeconds += durationSeconds;
+        var startMs = Date.parse(row.startedAt || row.createdAt || '');
+        var endMs = Date.parse(row.updatedAt || '');
+        if (isNaN(startMs) && !isNaN(Date.parse(row.createdAt || ''))) startMs = Date.parse(row.createdAt);
+        if ((isNaN(endMs) || endMs < startMs) && !isNaN(startMs) && durationSeconds > 0) {
+            endMs = startMs + durationSeconds * 1000;
+        }
+        if (isNaN(startMs) || isNaN(endMs) || endMs <= startMs) return;
+        intervals.push({ start: startMs, end: endMs });
+    });
+
+    var events = [];
+    intervals.forEach(function(interval) {
+        events.push({ time: interval.start, delta: 1 });
+        events.push({ time: interval.end, delta: -1 });
+    });
+    events.sort(function(a, b) {
+        if (a.time !== b.time) return a.time - b.time;
+        return a.delta - b.delta;
+    });
+
+    var concurrent = 0;
+    var maxConcurrent = 0;
+    events.forEach(function(event) {
+        concurrent += event.delta;
+        if (concurrent > maxConcurrent) maxConcurrent = concurrent;
+    });
+
+    var minStart = intervals.length ? intervals[0].start : 0;
+    var maxEnd = intervals.length ? intervals[0].end : 0;
+    intervals.forEach(function(interval) {
+        if (interval.start < minStart) minStart = interval.start;
+        if (interval.end > maxEnd) maxEnd = interval.end;
+    });
+    var wallSeconds = intervals.length && maxEnd > minStart ? Math.round((maxEnd - minStart) / 1000) : 0;
+    var avgConcurrent = wallSeconds ? totalSeconds / wallSeconds : 0;
+
+    return {
+        totalRunnerSeconds: totalSeconds,
+        totalRunnerTime: formatDuration(totalSeconds),
+        totalRunnerDays: Math.round((totalSeconds / 86400) * 10) / 10,
+        intervalRuns: intervals.length,
+        wallSeconds: wallSeconds,
+        wallTime: formatDuration(wallSeconds),
+        maxConcurrentRuns: maxConcurrent,
+        avgConcurrentRuns: Math.round(avgConcurrent * 10) / 10
+    };
+}
+
 function htmlEscape(value) {
     return String(value == null ? '' : value)
         .replace(/&/g, '&amp;')
@@ -352,7 +407,7 @@ function buildHtml(rows, summary) {
         ':root{color-scheme:light;--bg:#f6f7f9;--panel:#fff;--ink:#18202a;--muted:#5f6b7a;--grid:#e1e5ea;--blue:#2563eb;--green:#059669;--amber:#b7791f;--red:#dc2626;--violet:#7c3aed}' +
         '*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif}' +
         'header{padding:24px 28px 12px}h1{margin:0 0 6px;font-size:26px;letter-spacing:0}p{margin:0;color:var(--muted)}' +
-        '.wrap{padding:12px 28px 32px;display:grid;gap:16px}.kpis{display:grid;grid-template-columns:repeat(11,minmax(105px,1fr));gap:12px}' +
+        '.wrap{padding:12px 28px 32px;display:grid;gap:16px}.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:12px}' +
         '.kpi,.panel{background:var(--panel);border:1px solid var(--grid);border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)}.kpi{padding:14px}.kpi b{display:block;font-size:22px;margin-top:4px}.kpi span{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}' +
         '.grid{display:grid;grid-template-columns:1.4fr 1fr;gap:16px}.panel{padding:16px}.panel h2{font-size:16px;margin:0 0 12px}.chart{width:100%;height:340px;display:block}.pie{height:300px}' +
         'table{width:100%;border-collapse:collapse}th,td{padding:8px 10px;border-bottom:1px solid var(--grid);text-align:left;white-space:nowrap}th{font-size:12px;color:var(--muted);font-weight:600}th.sortable{cursor:pointer;user-select:none}th.sortable:after{content:"";display:inline-block;margin-left:5px;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid #9aa4b2;vertical-align:middle}th.sortable.desc:after{border-top:0;border-bottom:5px solid #9aa4b2}td.num{text-align:right;font-variant-numeric:tabular-nums}.scroll{overflow:auto;max-height:520px}' +
@@ -367,17 +422,25 @@ function buildHtml(rows, summary) {
         '<div class="kpi"><span>Limit Retries</span><b>' + summary.totals.rateLimitRetryCount + '</b></div>' +
         '<div class="kpi"><span>Timeouts</span><b>' + summary.totals.timeoutCount + '</b></div>' +
         '<div class="kpi"><span>Avg Duration</span><b>' + htmlEscape(summary.totals.avgDuration || '0s') + '</b></div>' +
+        '<div class="kpi"><span>Runner Time</span><b>' + htmlEscape(summary.runnerStats.totalRunnerTime || '0s') + '</b></div>' +
+        '<div class="kpi"><span>Runner Days</span><b>' + htmlEscape(summary.runnerStats.totalRunnerDays || 0) + '</b></div>' +
+        '<div class="kpi"><span>Max Runners</span><b>' + htmlEscape(summary.runnerStats.maxConcurrentRuns || 0) + '</b></div>' +
+        '<div class="kpi"><span>Avg Runners</span><b>' + htmlEscape(summary.runnerStats.avgConcurrentRuns || 0) + '</b></div>' +
         '<div class="kpi"><span>Read Tokens</span><b>' + formatShort(summary.totals.readTokens) + '</b></div>' +
         '<div class="kpi"><span>Write Tokens</span><b>' + formatShort(summary.totals.writeTokens) + '</b></div>' +
         '<div class="kpi"><span>Cached Tokens</span><b>' + formatShort(summary.totals.cachedTokens) + '</b></div>' +
         '<div class="kpi"><span>Reasoning Tokens</span><b>' + formatShort(summary.totals.reasoningTokens) + '</b></div>' +
         '</section>\n<section class="grid"><div class="panel"><h2>Daily Token Trend</h2><canvas id="daily" class="chart"></canvas><div class="legend"><span><i class="dot" style="background:#2563eb"></i>read</span><span><i class="dot" style="background:#059669"></i>write</span><span><i class="dot" style="background:#b7791f"></i>cached</span><span><i class="dot" style="background:#dc2626"></i>reasoning</span></div></div>' +
         '<div class="panel"><h2>Tokens By Agent</h2><canvas id="agents" class="chart"></canvas></div></section>\n' +
+        '<section class="grid"><div class="panel"><h2>Daily Runner Time</h2><canvas id="runnerDaily" class="chart"></canvas></div>' +
+        '<div class="panel"><h2>Runs By Day</h2><canvas id="runsDaily" class="chart"></canvas></div></section>\n' +
+        '<section class="grid"><div class="panel"><h2>Runner Time By Agent</h2><canvas id="runnerAgents" class="chart"></canvas></div>' +
+        '<div class="panel"><h2>Avg Run Time By Agent</h2><canvas id="avgRunnerAgents" class="chart"></canvas></div></section>\n' +
         '<section class="grid"><div class="panel"><h2>Agent Token Share</h2><canvas id="agentPie" class="chart pie"></canvas><div id="agentPieLegend" class="legend"></div></div>' +
         '<div class="panel"><h2>Token Type Share</h2><canvas id="tokenPie" class="chart pie"></canvas><div id="tokenPieLegend" class="legend"></div></div></section>\n' +
-        '<section class="panel"><h2>Agent Totals And Averages</h2><div class="scroll"><table id="agentTable"><thead><tr><th class="sortable" data-type="text">Agent</th><th class="sortable" data-type="number">Runs</th><th class="sortable" data-type="number">Attempts</th><th class="sortable" data-type="number">Resume Runs</th><th class="sortable" data-type="number">Loops</th><th class="sortable" data-type="number">Limit Retries</th><th class="sortable" data-type="number">Timeouts</th><th class="sortable" data-type="number">Avg Duration</th><th class="sortable" data-type="number">Read</th><th class="sortable" data-type="number">Avg Read</th><th class="sortable" data-type="number">Write</th><th class="sortable" data-type="number">Avg Write</th><th class="sortable" data-type="number">Cached</th><th class="sortable" data-type="number">Reasoning</th></tr></thead><tbody>' +
+        '<section class="panel"><h2>Agent Totals And Averages</h2><div class="scroll"><table id="agentTable"><thead><tr><th class="sortable" data-type="text">Agent</th><th class="sortable" data-type="number">Runs</th><th class="sortable" data-type="number">Attempts</th><th class="sortable" data-type="number">Resume Runs</th><th class="sortable" data-type="number">Loops</th><th class="sortable" data-type="number">Limit Retries</th><th class="sortable" data-type="number">Timeouts</th><th class="sortable" data-type="number">Runner Time</th><th class="sortable" data-type="number">Avg Duration</th><th class="sortable" data-type="number">Read</th><th class="sortable" data-type="number">Avg Read</th><th class="sortable" data-type="number">Write</th><th class="sortable" data-type="number">Avg Write</th><th class="sortable" data-type="number">Cached</th><th class="sortable" data-type="number">Reasoning</th></tr></thead><tbody>' +
         topAgents.map(function(a) {
-            return '<tr><td' + sortAttr(a.key) + '>' + htmlEscape(a.key) + '</td><td class="num"' + sortAttr(a.runs) + '>' + a.runs + '</td><td class="num"' + sortAttr(a.samples) + '>' + a.samples + '</td><td class="num"' + sortAttr(a.resumedRuns) + '>' + a.resumedRuns + '</td><td class="num"' + sortAttr(a.feedbackLoopCount) + '>' + a.feedbackLoopCount + '</td><td class="num"' + sortAttr(a.rateLimitRetryCount) + '>' + a.rateLimitRetryCount + '</td><td class="num"' + sortAttr(a.timeoutCount) + '>' + a.timeoutCount + '</td><td class="num"' + sortAttr(a.avgDurationSeconds) + '>' + htmlEscape(a.avgDuration || '0s') + '</td><td class="num"' + sortAttr(a.readTokens) + '>' + formatShort(a.readTokens) + '</td><td class="num"' + sortAttr(a.avgReadTokens) + '>' + formatShort(a.avgReadTokens) + '</td><td class="num"' + sortAttr(a.writeTokens) + '>' + formatShort(a.writeTokens) + '</td><td class="num"' + sortAttr(a.avgWriteTokens) + '>' + formatShort(a.avgWriteTokens) + '</td><td class="num"' + sortAttr(a.cachedTokens) + '>' + formatShort(a.cachedTokens) + '</td><td class="num"' + sortAttr(a.reasoningTokens) + '>' + formatShort(a.reasoningTokens) + '</td></tr>';
+            return '<tr><td' + sortAttr(a.key) + '>' + htmlEscape(a.key) + '</td><td class="num"' + sortAttr(a.runs) + '>' + a.runs + '</td><td class="num"' + sortAttr(a.samples) + '>' + a.samples + '</td><td class="num"' + sortAttr(a.resumedRuns) + '>' + a.resumedRuns + '</td><td class="num"' + sortAttr(a.feedbackLoopCount) + '>' + a.feedbackLoopCount + '</td><td class="num"' + sortAttr(a.rateLimitRetryCount) + '>' + a.rateLimitRetryCount + '</td><td class="num"' + sortAttr(a.timeoutCount) + '>' + a.timeoutCount + '</td><td class="num"' + sortAttr(a.durationSeconds) + '>' + htmlEscape(a.totalDuration || '0s') + '</td><td class="num"' + sortAttr(a.avgDurationSeconds) + '>' + htmlEscape(a.avgDuration || '0s') + '</td><td class="num"' + sortAttr(a.readTokens) + '>' + formatShort(a.readTokens) + '</td><td class="num"' + sortAttr(a.avgReadTokens) + '>' + formatShort(a.avgReadTokens) + '</td><td class="num"' + sortAttr(a.writeTokens) + '>' + formatShort(a.writeTokens) + '</td><td class="num"' + sortAttr(a.avgWriteTokens) + '>' + formatShort(a.avgWriteTokens) + '</td><td class="num"' + sortAttr(a.cachedTokens) + '>' + formatShort(a.cachedTokens) + '</td><td class="num"' + sortAttr(a.reasoningTokens) + '>' + formatShort(a.reasoningTokens) + '</td></tr>';
         }).join('') +
         '</tbody></table></div></section>\n' +
         '<section class="panel"><h2>Recent Runs</h2><div class="scroll"><table id="runsTable"><thead><tr><th class="sortable" data-type="text">Created</th><th class="sortable" data-type="text">Agent</th><th class="sortable" data-type="text">Key</th><th class="sortable" data-type="text">Conclusion</th><th class="sortable" data-type="number">Duration</th><th class="sortable" data-type="number">Attempts</th><th class="sortable" data-type="text">Resume</th><th class="sortable" data-type="number">Loops</th><th class="sortable" data-type="number">Limit Retries</th><th class="sortable" data-type="number">Timeouts</th><th class="sortable" data-type="number">Read</th><th class="sortable" data-type="number">Write</th><th class="sortable" data-type="number">Cached</th><th class="sortable" data-type="number">Reasoning</th><th class="sortable" data-type="number">Run</th></tr></thead><tbody>' +
@@ -386,16 +449,18 @@ function buildHtml(rows, summary) {
         }).join('') +
         '</tbody></table></div></section>\n</main><div id="chartTooltip" class="tooltip"></div>\n<script>const DATA=' + payload.replace(/</g, '\\u003c') + ';\n' +
         'function short(v){v=v||0;if(v>=1e9)return(v/1e9).toFixed(1).replace(/\\.0$/,"")+"b";if(v>=1e6)return(v/1e6).toFixed(1).replace(/\\.0$/,"")+"m";if(v>=1e3)return(v/1e3).toFixed(1).replace(/\\.0$/,"")+"k";return String(v)}' +
+        'function dur(v){v=Math.max(0,Math.round(v||0));const d=Math.floor(v/86400),h=Math.floor(v%86400/3600),m=Math.floor(v%3600/60),s=v%60;if(d)return d+"d "+h+"h";if(h)return h+"h "+m+"m";if(m)return m+"m "+s+"s";return s+"s"}' +
         'function labelLines(label,mode){let text=String(label||"");if(mode==="date")text=text.slice(5);if(mode==="agent"){const chunks=text.split("_");const lines=[];let line="";chunks.forEach(part=>{const next=line?line+"_"+part:part;if(next.length>14&&line){lines.push(line);line=part}else line=next});if(line)lines.push(line);return lines.slice(0,4)}return [text]}' +
         'function tip(){return document.getElementById("chartTooltip")}function showTip(ev,text){const t=tip();if(!t)return;t.textContent=text;t.style.display="block";const x=Math.min(innerWidth-280,ev.clientX+14),y=Math.min(innerHeight-120,ev.clientY+14);t.style.left=Math.max(8,x)+"px";t.style.top=Math.max(8,y)+"px"}function hideTip(){const t=tip();if(t)t.style.display="none"}' +
         'function bindTooltip(c,items){c._items=items;c.onmousemove=e=>{const r=c.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,hit=(c._items||[]).find(it=>x>=it.x&&x<=it.x+it.w&&y>=it.y&&y<=it.y+it.h);if(hit)showTip(e,hit.text);else hideTip()};c.onmouseleave=hideTip}' +
-        'function drawBars(id, labels, series, options){options=options||{};const c=document.getElementById(id),ctx=c.getContext("2d"),dpr=devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight,items=[];c.width=w*dpr;c.height=h*dpr;ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);const pad={l:54,r:18,t:12,b:options.bottom||82};const max=Math.max(1,...series.flatMap(s=>s.values));ctx.strokeStyle="#e1e5ea";ctx.fillStyle="#5f6b7a";ctx.font="12px -apple-system,Segoe UI,sans-serif";for(let i=0;i<=4;i++){let y=pad.t+(h-pad.t-pad.b)*i/4;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();ctx.fillText(short(max*(1-i/4)),6,y+4)}const groupW=(w-pad.l-pad.r)/Math.max(1,labels.length),barW=Math.max(3,Math.min(18,groupW/(series.length+1)));labels.forEach((lab,i)=>{series.forEach((s,j)=>{let val=s.values[i]||0,bh=(h-pad.t-pad.b)*val/max,x=pad.l+i*groupW+(groupW-series.length*barW)/2+j*barW,y=h-pad.b-bh;ctx.fillStyle=s.color;ctx.fillRect(x,y,barW*.75,bh);items.push({x:x,y:y,w:barW*.75,h:Math.max(2,bh),text:String(lab)+"\\n"+(s.label||"tokens")+": "+short(val)})});const lines=labelLines(lab,options.labelMode);ctx.fillStyle="#5f6b7a";ctx.textAlign="center";ctx.textBaseline="top";lines.forEach((line,k)=>ctx.fillText(line,pad.l+i*groupW+groupW/2,h-pad.b+10+k*13,Math.max(28,groupW-4)));ctx.textAlign="left";ctx.textBaseline="alphabetic"});bindTooltip(c,items)}' +
+        'function drawBars(id, labels, series, options){options=options||{};const fmt=options.valueFormat==="duration"?dur:short;const c=document.getElementById(id),ctx=c.getContext("2d"),dpr=devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight,items=[];c.width=w*dpr;c.height=h*dpr;ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);const pad={l:54,r:18,t:12,b:options.bottom||82};const max=Math.max(1,...series.flatMap(s=>s.values));ctx.strokeStyle="#e1e5ea";ctx.fillStyle="#5f6b7a";ctx.font="12px -apple-system,Segoe UI,sans-serif";for(let i=0;i<=4;i++){let y=pad.t+(h-pad.t-pad.b)*i/4;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();ctx.fillText(fmt(max*(1-i/4)),6,y+4)}const groupW=(w-pad.l-pad.r)/Math.max(1,labels.length),barW=Math.max(3,Math.min(18,groupW/(series.length+1)));labels.forEach((lab,i)=>{series.forEach((s,j)=>{let val=s.values[i]||0,bh=(h-pad.t-pad.b)*val/max,x=pad.l+i*groupW+(groupW-series.length*barW)/2+j*barW,y=h-pad.b-bh;ctx.fillStyle=s.color;ctx.fillRect(x,y,barW*.75,bh);items.push({x:x,y:y,w:barW*.75,h:Math.max(2,bh),text:String(lab)+"\\n"+(s.label||"value")+": "+fmt(val)})});const lines=labelLines(lab,options.labelMode);ctx.fillStyle="#5f6b7a";ctx.textAlign="center";ctx.textBaseline="top";lines.forEach((line,k)=>ctx.fillText(line,pad.l+i*groupW+groupW/2,h-pad.b+10+k*13,Math.max(28,groupW-4)));ctx.textAlign="left";ctx.textBaseline="alphabetic"});bindTooltip(c,items)}' +
         'function drawPie(id,legendId,items){const c=document.getElementById(id),ctx=c.getContext("2d"),dpr=devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight,hit=[];c.width=w*dpr;c.height=h*dpr;ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);const total=items.reduce((s,x)=>s+x.value,0)||1,cx=w/2,cy=h/2,r=Math.min(w,h)*.34;let a=-Math.PI/2;items.forEach(x=>{const start=a,span=x.value/total*Math.PI*2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,a,a+span);ctx.closePath();ctx.fillStyle=x.color;ctx.fill();hit.push({start:start,end:start+span,label:x.label,value:x.value});a+=span});c._items=[];c.onmousemove=e=>{const rect=c.getBoundingClientRect(),mx=e.clientX-rect.left-cx,my=e.clientY-rect.top-cy,dist=Math.sqrt(mx*mx+my*my);let ang=Math.atan2(my,mx);if(ang<-Math.PI/2)ang+=Math.PI*2;const found=dist<=r&&hit.find(x=>ang>=x.start&&ang<=x.end);if(found)showTip(e,found.label+": "+short(found.value)+" ("+((found.value/total)*100).toFixed(1)+"%)");else hideTip()};c.onmouseleave=hideTip;const el=document.getElementById(legendId);el.innerHTML=items.map(x=>"<span><i class=\\"dot\\" style=\\"background:"+x.color+"\\"></i>"+x.label+" "+short(x.value)+"</span>").join("")}' +
         'function makeSortable(id){const table=document.getElementById(id);if(!table)return;table.querySelectorAll("th.sortable").forEach((th,idx)=>th.addEventListener("click",()=>{const desc=!th.classList.contains("desc");table.querySelectorAll("th").forEach(h=>h.classList.remove("desc","asc"));th.classList.add(desc?"desc":"asc");const type=th.dataset.type||"text",body=table.tBodies[0],rows=Array.from(body.rows);rows.sort((a,b)=>{let av=a.cells[idx].dataset.sort||a.cells[idx].textContent,bv=b.cells[idx].dataset.sort||b.cells[idx].textContent;if(type==="number"){av=parseFloat(av)||0;bv=parseFloat(bv)||0;return desc?bv-av:av-bv}return desc?String(bv).localeCompare(String(av)):String(av).localeCompare(String(bv))});rows.forEach(r=>body.appendChild(r))}))}' +
         'const daily=DATA.summary.byDay;drawBars("daily",daily.map(x=>x.key),[{label:"read",color:"#2563eb",values:daily.map(x=>x.readTokens)},{label:"write",color:"#059669",values:daily.map(x=>x.writeTokens)},{label:"cached",color:"#b7791f",values:daily.map(x=>x.cachedTokens)},{label:"reasoning",color:"#dc2626",values:daily.map(x=>x.reasoningTokens)}],{labelMode:"date",bottom:70});' +
         'const agents=DATA.summary.byAgent.slice().sort((a,b)=>(b.readTokens+b.writeTokens+b.cachedTokens+b.reasoningTokens)-(a.readTokens+a.writeTokens+a.cachedTokens+a.reasoningTokens)).slice(0,12);drawBars("agents",agents.map(x=>x.key),[{label:"total",color:"#7c3aed",values:agents.map(x=>x.readTokens+x.writeTokens+x.cachedTokens+x.reasoningTokens)}],{labelMode:"agent",bottom:112});' +
+        'const runnerAgents=DATA.summary.byAgent.slice().sort((a,b)=>b.durationSeconds-a.durationSeconds).slice(0,12);drawBars("runnerDaily",daily.map(x=>x.key),[{label:"runner time",color:"#0891b2",values:daily.map(x=>x.durationSeconds)}],{labelMode:"date",bottom:70,valueFormat:"duration"});drawBars("runsDaily",daily.map(x=>x.key),[{label:"runs",color:"#4f46e5",values:daily.map(x=>x.runs)},{label:"attempts",color:"#ea580c",values:daily.map(x=>x.samples)}],{labelMode:"date",bottom:70});drawBars("runnerAgents",runnerAgents.map(x=>x.key),[{label:"runner time",color:"#0f766e",values:runnerAgents.map(x=>x.durationSeconds)}],{labelMode:"agent",bottom:112,valueFormat:"duration"});drawBars("avgRunnerAgents",runnerAgents.map(x=>x.key),[{label:"avg run time",color:"#ca8a04",values:runnerAgents.map(x=>x.avgDurationSeconds)}],{labelMode:"agent",bottom:112,valueFormat:"duration"});' +
         'const colors=["#2563eb","#059669","#b7791f","#dc2626","#7c3aed","#0891b2","#ea580c","#4f46e5","#64748b"];const agentPie=agents.slice(0,8).map((x,i)=>({label:x.key,value:x.readTokens+x.writeTokens+x.cachedTokens+x.reasoningTokens,color:colors[i%colors.length]}));const agentOther=DATA.summary.byAgent.reduce((s,x)=>s+x.readTokens+x.writeTokens+x.cachedTokens+x.reasoningTokens,0)-agentPie.reduce((s,x)=>s+x.value,0);if(agentOther>0)agentPie.push({label:"other",value:agentOther,color:"#94a3b8"});const tokenPie=[{label:"read",value:DATA.summary.totals.readTokens,color:"#2563eb"},{label:"write",value:DATA.summary.totals.writeTokens,color:"#059669"},{label:"cached",value:DATA.summary.totals.cachedTokens,color:"#b7791f"},{label:"reasoning",value:DATA.summary.totals.reasoningTokens,color:"#dc2626"}];drawPie("agentPie","agentPieLegend",agentPie);drawPie("tokenPie","tokenPieLegend",tokenPie);makeSortable("agentTable");makeSortable("runsTable");' +
-        'addEventListener("resize",()=>{drawBars("daily",daily.map(x=>x.key),[{label:"read",color:"#2563eb",values:daily.map(x=>x.readTokens)},{label:"write",color:"#059669",values:daily.map(x=>x.writeTokens)},{label:"cached",color:"#b7791f",values:daily.map(x=>x.cachedTokens)},{label:"reasoning",color:"#dc2626",values:daily.map(x=>x.reasoningTokens)}],{labelMode:"date",bottom:70});drawBars("agents",agents.map(x=>x.key),[{label:"total",color:"#7c3aed",values:agents.map(x=>x.readTokens+x.writeTokens+x.cachedTokens+x.reasoningTokens)}],{labelMode:"agent",bottom:112});drawPie("agentPie","agentPieLegend",agentPie);drawPie("tokenPie","tokenPieLegend",tokenPie)});' +
+        'addEventListener("resize",()=>{drawBars("daily",daily.map(x=>x.key),[{label:"read",color:"#2563eb",values:daily.map(x=>x.readTokens)},{label:"write",color:"#059669",values:daily.map(x=>x.writeTokens)},{label:"cached",color:"#b7791f",values:daily.map(x=>x.cachedTokens)},{label:"reasoning",color:"#dc2626",values:daily.map(x=>x.reasoningTokens)}],{labelMode:"date",bottom:70});drawBars("agents",agents.map(x=>x.key),[{label:"total",color:"#7c3aed",values:agents.map(x=>x.readTokens+x.writeTokens+x.cachedTokens+x.reasoningTokens)}],{labelMode:"agent",bottom:112});drawBars("runnerDaily",daily.map(x=>x.key),[{label:"runner time",color:"#0891b2",values:daily.map(x=>x.durationSeconds)}],{labelMode:"date",bottom:70,valueFormat:"duration"});drawBars("runsDaily",daily.map(x=>x.key),[{label:"runs",color:"#4f46e5",values:daily.map(x=>x.runs)},{label:"attempts",color:"#ea580c",values:daily.map(x=>x.samples)}],{labelMode:"date",bottom:70});drawBars("runnerAgents",runnerAgents.map(x=>x.key),[{label:"runner time",color:"#0f766e",values:runnerAgents.map(x=>x.durationSeconds)}],{labelMode:"agent",bottom:112,valueFormat:"duration"});drawBars("avgRunnerAgents",runnerAgents.map(x=>x.key),[{label:"avg run time",color:"#ca8a04",values:runnerAgents.map(x=>x.avgDurationSeconds)}],{labelMode:"agent",bottom:112,valueFormat:"duration"});drawPie("agentPie","agentPieLegend",agentPie);drawPie("tokenPie","tokenPieLegend",tokenPie)});' +
         '</script>\n</body>\n</html>\n';
 }
 
@@ -532,12 +597,14 @@ function buildSummary(rows, totalRuns) {
     });
     totals.avgDurationSeconds = totals.durationRuns ? Math.round(totals.durationSeconds / totals.durationRuns) : 0;
     totals.avgDuration = formatDuration(totals.avgDurationSeconds);
+    var runnerStats = calculateRunnerStats(rows);
     return {
         generatedAt: new Date().toISOString(),
         totalRuns: totalRuns,
         runsWithTokens: rows.length,
         runsWithoutTokens: Math.max(0, totalRuns - rows.length),
         totals: totals,
+        runnerStats: runnerStats,
         byDay: groupBy(rows, function(row) { return row.day; }),
         byAgent: groupBy(rows, function(row) { return row.agent; })
     };
