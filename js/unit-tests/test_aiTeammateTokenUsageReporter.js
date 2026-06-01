@@ -189,6 +189,9 @@ suite('aiTeammateTokenUsageReporter parsing', function() {
     test('builds HTML with loop KPIs and chart tooltips', function() {
         var reporter = loadReporter();
         var summary = reporter.buildSummary([{
+            createdAt: '2026-06-01T00:00:00Z',
+            startedAt: '2026-06-01T00:00:00Z',
+            updatedAt: '2026-06-01T00:27:02Z',
             day: '2026-06-01',
             agent: 'pr_rework',
             readTokens: 100,
@@ -227,6 +230,10 @@ suite('aiTeammateTokenUsageReporter parsing', function() {
         assert.contains(html, '<span>Limit Retries</span><b>1</b>');
         assert.contains(html, '<span>Timeouts</span><b>1</b>');
         assert.contains(html, '<span>Avg Duration</span><b>27m 2s</b>');
+        assert.contains(html, '<span>Runner Time</span><b>27m 2s</b>');
+        assert.contains(html, '<span>Max Runners</span><b>1</b>');
+        assert.contains(html, '<h2>Daily Runner Time</h2>');
+        assert.contains(html, '<h2>Runner Time By Agent</h2>');
         assert.contains(html, '>27m 2s</td>');
         assert.contains(html, 'id="chartTooltip"');
         assert.contains(html, 'function showTip');
