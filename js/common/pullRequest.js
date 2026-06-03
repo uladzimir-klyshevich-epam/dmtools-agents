@@ -28,7 +28,7 @@ function sanitizeTitle(title) {
 
 function extractPrUrl(output, runCommand, branchName, workingDir) {
     var cleaned = cleanCommandOutput(output);
-    var urlMatch = cleaned.match(/https:\/\/github\.com\/[^\s]+/);
+    var urlMatch = cleaned.match(/https:\/\/(?:github\.com|[^/\s]*gitlab[^/\s]*|git\.epam\.com)\/[^\s]+/);
     if (urlMatch) return urlMatch[0];
 
     var prNumberMatch = cleaned.match(/#(\d+)/);
@@ -176,8 +176,33 @@ function createPullRequest(options) {
     var workingDir = options.workingDir || null;
     var runCommand = options.runCommand || defaultRunCommand;
     var writeFile = options.writeFile || defaultWriteFile;
+    var scm = options.scm || null;
 
     if (!branchName) return { success: false, error: 'branchName is required' };
+
+    if (scm && typeof scm.createPr === 'function') {
+        var body = resolveBodyContent(options);
+        try {
+            var created = scm.createPr({
+                title: sanitizeTitle(options.title),
+                branchName: branchName,
+                baseBranch: baseBranch,
+                body: body,
+                removeSourceBranch: options.removeSourceBranch
+            });
+            if (created && created.success) {
+                console.log('✅ Pull/Merge Request created:', created.prUrl || '(URL not found)');
+                return created;
+            }
+            return created || { success: false, error: 'SCM provider returned no result from createPr' };
+        } catch (error) {
+            var errMsg = error && error.toString ? error.toString() : String(error);
+            if (errMsg.indexOf('already exists') !== -1 || errMsg.indexOf('Another open merge request') !== -1) {
+                console.warn('SCM provider reported an existing PR/MR for branch ' + branchName + ': ' + errMsg);
+            }
+            return { success: false, error: errMsg };
+        }
+    }
 
     try {
         var existingPr = cleanCommandOutput(

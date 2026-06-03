@@ -6,12 +6,12 @@
  *
  * Configure globally via .dmtools/config.js:
  *   module.exports = {
- *     scm: { provider: 'ado' },
+ *     scm: { provider: 'ado' }, // 'github' | 'gitlab' | 'ado'
  *     repository: { owner: 'MyOrg', repo: 'my-repo' }
  *   }
  *
  * Per-agent override via JSON customParams:
- *   { "customParams": { "scmProvider": "ado", "targetRepository": { "owner": "MyOrg", "repo": "my-repo" } } }
+ *   { "customParams": { "scmProvider": "gitlab", "targetRepository": { "owner": "MyOrg", "repo": "my-repo" } } }
  */
 
 function _parseJson(raw) {
@@ -19,6 +19,28 @@ function _parseJson(raw) {
         try { return JSON.parse(raw); } catch (e) { return raw; }
     }
     return raw;
+}
+
+function _toArray(raw) {
+    var parsed = _parseJson(raw);
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && parsed.value) return parsed.value;
+    if (parsed && parsed.workflow_runs) return parsed.workflow_runs;
+    if (parsed && parsed.runs) return parsed.runs;
+    return parsed ? [parsed] : [];
+}
+
+function _readFileMaybe(path) {
+    try {
+        var raw = file_read({ path: path });
+        if (raw && raw.trim()) return raw;
+    } catch (e) {
+        try {
+            raw = file_read(path);
+            if (raw && raw.trim()) return raw;
+        } catch (ignored) {}
+    }
+    return null;
 }
 
 function _createGithubProvider(workspace, repository) {
@@ -90,6 +112,11 @@ function _createGithubProvider(workspace, repository) {
         },
         triggerWorkflow: function(owner, repo, workflowFile, payload, ref) {
             return github_trigger_workflow(owner, repo, workflowFile, payload, ref);
+        },
+        updateBranch: function(prId, owner, repo) {
+            return cli_execute_command({
+                command: 'gh api repos/' + (owner || workspace) + '/' + (repo || repository) + '/pulls/' + prId + '/update-branch -X PUT'
+            });
         },
         fetchDiscussions: function(prId) {
             var prIdStr = String(prId);
@@ -229,6 +256,244 @@ function _createGithubProvider(workspace, repository) {
                 if (!match) return null;
                 return { owner: match[1], repo: match[2].replace(/\.git$/, '') };
             } catch (e) { return null; }
+        }
+    };
+}
+
+function _normalizeGitLabState(state) {
+    if (state === 'open') return 'opened';
+    if (state === 'active') return 'opened';
+    return state || 'opened';
+}
+
+function _normalizeGitLabPipelineStatus(status) {
+    if (!status) return null;
+    var s = String(status).toLowerCase();
+    if (s === 'failure' || s === 'failed') return 'failed';
+    if (s === 'success' || s === 'succeeded') return 'success';
+    if (s === 'in_progress') return 'running';
+    if (s === 'queued' || s === 'pending') return 'pending';
+    if (s === 'waiting') return 'manual';
+    return status;
+}
+
+function _normalizeGitLabMr(mr) {
+    if (!mr) return mr;
+    var sourceBranch = mr.source_branch || (mr.head && mr.head.ref) || '';
+    var targetBranch = mr.target_branch || (mr.base && mr.base.ref) || '';
+    var id = mr.iid || mr.number || mr.id;
+    var htmlUrl = mr.web_url || mr.html_url || null;
+    var labels = mr.labels || [];
+    return Object.assign({}, mr, {
+        number: id,
+        html_url: htmlUrl,
+        state: mr.state,
+        merged_at: mr.merged_at || null,
+        mergeable: !(mr.has_conflicts === true),
+        mergeable_state: mr.detailed_merge_status || mr.merge_status || null,
+        head: Object.assign({}, mr.head || {}, { ref: sourceBranch, sha: mr.sha || (mr.diff_refs && mr.diff_refs.head_sha) }),
+        base: Object.assign({}, mr.base || {}, { ref: targetBranch, sha: mr.diff_refs && mr.diff_refs.base_sha }),
+        labels: labels
+    });
+}
+
+function _createGitLabProvider(workspace, repository) {
+    return {
+        listPrs: function(state) {
+            var requestedState = _normalizeGitLabState(state);
+            var raw = gitlab_list_mrs({ workspace: workspace, repository: repository, state: requestedState });
+            var prs = _toArray(raw).map(_normalizeGitLabMr);
+            if (state === 'closed') {
+                return prs.filter(function(pr) { return pr.state === 'closed' || pr.merged_at; });
+            }
+            return prs;
+        },
+        getPr: function(prId) {
+            return _normalizeGitLabMr(_parseJson(gitlab_get_mr({
+                workspace: workspace, repository: repository, pullRequestId: String(prId)
+            })));
+        },
+        getPrComments: function(prId) {
+            return _toArray(gitlab_get_mr_comments({ workspace: workspace, repository: repository, pullRequestId: String(prId) }));
+        },
+        addComment: function(prId, text) {
+            return gitlab_add_mr_comment({ workspace: workspace, repository: repository, pullRequestId: String(prId), text: text });
+        },
+        replyToThread: function(prId, thread, text) {
+            var threadId = thread.threadId || thread.rootCommentId || thread.discussionId;
+            if (threadId) {
+                return gitlab_reply_to_mr_thread({
+                    workspace: workspace, repository: repository,
+                    pullRequestId: String(prId), discussionId: String(threadId), text: text
+                });
+            }
+            return gitlab_add_mr_comment({ workspace: workspace, repository: repository, pullRequestId: String(prId), text: text });
+        },
+        resolveThread: function(prId, thread) {
+            var threadId = thread.threadId || thread.discussionId;
+            if (threadId) {
+                return gitlab_resolve_mr_thread({
+                    workspace: workspace, repository: repository,
+                    pullRequestId: String(prId), discussionId: String(threadId)
+                });
+            }
+            console.warn('SCM GitLab: No discussion id to resolve');
+        },
+        addInlineComment: function(prId, filePath, line, text, startLine, side) {
+            var mr = this.getPr(prId);
+            var refs = (mr && mr.diff_refs) || {};
+            if (!refs.base_sha || !refs.head_sha || !refs.start_sha) {
+                throw new Error('GitLab inline comments require MR diff_refs; gitlab_get_mr did not return them');
+            }
+            return gitlab_add_inline_mr_comment({
+                workspace: workspace, repository: repository,
+                pullRequestId: String(prId), filePath: filePath,
+                line: String(line), text: text,
+                baseSha: refs.base_sha, headSha: refs.head_sha, startSha: refs.start_sha
+            });
+        },
+        mergePr: function(prId, mergeMethod, commitTitle, commitMessage) {
+            return gitlab_merge_mr({
+                workspace: workspace, repository: repository,
+                pullRequestId: String(prId),
+                mergeCommitMessage: commitMessage || commitTitle || ''
+            });
+        },
+        addLabel: function(prId, label) {
+            return gitlab_add_mr_label({ workspace: workspace, repository: repository, pullRequestId: String(prId), label: label });
+        },
+        removeLabel: function(prId, label, labelId) {
+            return gitlab_remove_mr_label({ workspace: workspace, repository: repository, pullRequestId: String(prId), label: label });
+        },
+        getPrDiff: function(prId) {
+            return gitlab_get_mr_diff({ workspace: workspace, repository: repository, pullRequestId: String(prId) });
+        },
+        getCommitCheckRuns: function(sha) {
+            console.warn('SCM GitLab: commit check runs are represented as pipelines/jobs — returning null');
+            return null;
+        },
+        getJobLogs: function(jobId) {
+            return gitlab_get_job_logs({ workspace: workspace, repository: repository, jobId: String(jobId) });
+        },
+        listWorkflowRuns: function(status, workflowId, limit) {
+            var runs = _toArray(gitlab_list_pipeline_runs({
+                workspace: workspace,
+                repository: repository,
+                status: _normalizeGitLabPipelineStatus(status),
+                ref: null,
+                limit: String(limit || 50)
+            }));
+            var mapped = runs.map(function(run) {
+                return Object.assign({}, run, {
+                    name: run.name || run.ref || '',
+                    display_title: run.name || run.ref || '',
+                    status: run.status === 'running' ? 'in_progress' : run.status,
+                    run_number: run.id
+                });
+            });
+            return JSON.stringify({ workflow_runs: mapped });
+        },
+        triggerWorkflow: function(owner, repo, workflowFile, payload, ref) {
+            var variables = {};
+            var parsed = _parseJson(payload);
+            if (parsed && typeof parsed === 'object') {
+                Object.keys(parsed).forEach(function(key) {
+                    variables[key] = parsed[key];
+                });
+            }
+            variables.workflow_file = workflowFile;
+            return gitlab_trigger_pipeline({
+                workspace: owner || workspace,
+                repository: repo || repository,
+                ref: ref || 'main',
+                variablesJson: JSON.stringify(variables)
+            });
+        },
+        createPr: function(options) {
+            options = options || {};
+            var raw = gitlab_create_mr({
+                workspace: workspace,
+                repository: repository,
+                sourceBranch: options.branchName,
+                targetBranch: options.baseBranch || 'main',
+                title: options.title,
+                description: options.body || '',
+                removeSourceBranch: options.removeSourceBranch === false ? 'false' : 'true'
+            });
+            var mr = _normalizeGitLabMr(_parseJson(raw));
+            return {
+                success: true,
+                prUrl: mr && mr.html_url,
+                number: mr && mr.number,
+                output: raw
+            };
+        },
+        updateBranch: function(prId, owner, repo) {
+            return gitlab_rebase_mr({
+                workspace: owner || workspace,
+                repository: repo || repository,
+                pullRequestId: String(prId)
+            });
+        },
+        fetchDiscussions: function(prId) {
+            var discussions = _toArray(gitlab_get_mr_discussions({
+                workspace: workspace, repository: repository, pullRequestId: String(prId)
+            }));
+            var sections = [];
+            var rawThreads = [];
+            var section = '## Review Threads\n\n';
+            var hasContent = false;
+
+            discussions.forEach(function(thread) {
+                var notes = thread.notes || [];
+                var root = notes[0] || {};
+                var body = (root.body || '').trim();
+                var pos = root.position || {};
+                var resolved = thread.resolved === true || root.resolved === true;
+                var path = pos.new_path || pos.old_path || null;
+                var line = pos.new_line || pos.old_line || null;
+
+                rawThreads.push({
+                    index: rawThreads.length + 1,
+                    rootCommentId: thread.id,
+                    threadId: thread.id,
+                    discussionId: thread.id,
+                    path: path,
+                    line: line,
+                    resolved: resolved,
+                    body: body
+                });
+
+                if (resolved) return;
+                hasContent = true;
+                section += '### Thread ' + rawThreads.length;
+                if (path) {
+                    section += ' — `' + path + '`';
+                    if (line) section += ' line ' + line;
+                }
+                section += '\n\n';
+                var author = root.author ? (root.author.username || root.author.name) : 'unknown';
+                var date = root.created_at ? root.created_at.substring(0, 10) : '';
+                section += body ? ('**' + author + '** (' + date + '):\n' + body + '\n\n') : '_[No comment body]_\n\n';
+                for (var i = 1; i < notes.length; i++) {
+                    var reply = notes[i] || {};
+                    var rAuthor = reply.author ? (reply.author.username || reply.author.name) : 'unknown';
+                    var rDate = reply.created_at ? reply.created_at.substring(0, 10) : '';
+                    section += '> **' + rAuthor + '** (' + rDate + '): ' + (reply.body || '').trim() + '\n\n';
+                }
+                section += '---\n\n';
+            });
+
+            if (hasContent) sections.push(section);
+            return {
+                markdown: sections.length > 0
+                    ? '# PR Discussion History\n\n_Previous review discussions for MR #' + prId + '._\n\n' + sections.join('\n')
+                    : null,
+                rawThreads: rawThreads.length > 0 ? { threads: rawThreads } : null
+            };
+        },
+        getRemoteRepoInfo: function() {
+            return _detectRepoFromGitRemote('gitlab');
         }
     };
 }
@@ -444,12 +709,24 @@ function _detectRepoFromGitRemote(provider) {
         var rawUrl = cli_execute_command({ command: 'git config --get remote.origin.url' }) || '';
         var remoteUrl = rawUrl.split('\n')
             .map(function(l) { return l.trim(); })
-            .filter(function(l) { return l.indexOf('github.com') !== -1 || l.indexOf('dev.azure.com') !== -1 || l.indexOf('ssh.dev.azure.com') !== -1; })[0] || '';
+            .filter(function(l) {
+                return l.indexOf('github.com') !== -1 ||
+                    l.indexOf('gitlab') !== -1 ||
+                    l.indexOf('git.epam.com') !== -1 ||
+                    l.indexOf('dev.azure.com') !== -1 ||
+                    l.indexOf('ssh.dev.azure.com') !== -1;
+            })[0] || '';
         if (provider === 'ado') {
             var match = remoteUrl.match(/dev\.azure\.com[/:]([^/]+)\/([^/]+)\/_git\/([^/]+)/);
             if (match) return { owner: match[1], repo: match[3] };
             match = remoteUrl.match(/ssh\.dev\.azure\.com:v3\/([^/]+)\/([^/]+)\/([^/]+)/);
             if (match) return { owner: match[1], repo: match[3] };
+        } else if (provider === 'gitlab') {
+            var normalized = remoteUrl
+                .replace(/^git@([^:]+):/, 'https://$1/')
+                .replace(/^ssh:\/\/git@([^/]+)\//, 'https://$1/');
+            var glMatch = normalized.match(/https?:\/\/[^/]+\/(.+)\/([^/?#\s]+?)(?:\.git)?(?:[?#].*)?$/);
+            if (glMatch) return { owner: glMatch[1], repo: glMatch[2].replace(/\.git$/, '') };
         } else {
             var ghMatch = remoteUrl.match(/github\.com[:/]([^/]+)\/([^/?#\s]+)/);
             if (ghMatch) return { owner: ghMatch[1], repo: ghMatch[2].replace(/\.git$/, '') };
@@ -475,11 +752,15 @@ function createScm(config) {
     if (provider === 'ado') {
         return _createAdoProvider(repo);
     }
+    if (provider === 'gitlab') {
+        return _createGitLabProvider(owner, repo);
+    }
     return _createGithubProvider(owner, repo);
 }
 
 module.exports = {
     createScm: createScm,
     _createGithubProvider: _createGithubProvider,
+    _createGitLabProvider: _createGitLabProvider,
     _createAdoProvider: _createAdoProvider
 };

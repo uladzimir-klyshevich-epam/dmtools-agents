@@ -89,38 +89,27 @@ function action(params) {
                 }
             }
 
-            // Use gh api --input JSON to avoid shell quoting issues with title special chars
             console.log('Creating PR for rework from existing branch...');
             try {
                 const ticket = jira_get_ticket({ key: ticketKey });
                 const summary = ticket && ticket.fields ? (ticket.fields.summary || ticketKey) : ticketKey;
                 const prTitle = configLoader.formatTemplate(config.formats.prTitle.rework, {ticketKey: ticketKey, ticketSummary: summary});
 
-                const prData = JSON.stringify({
+                if (!scm.createPr) {
+                    throw new Error('Configured SCM provider does not support createPr');
+                }
+                const prResult = scm.createPr({
                     title: prTitle,
                     body: 'Auto-created PR for rework of test automation.\n\nTicket: ' + ticketKey,
-                    head: testBranchName,
-                    base: config.git.baseBranch
+                    branchName: testBranchName,
+                    baseBranch: config.git.baseBranch
                 });
-                file_write({ path: 'pr_create_' + ticketKey + '.json', content: prData });
-
-                const createOutput = cli_execute_command({
-                    command: 'gh api repos/' + repoInfo.owner + '/' + repoInfo.repo + '/pulls --input pr_create_' + ticketKey + '.json'
-                }) || '';
-
-                console.log('gh api pr create output length:', createOutput.length);
-
-                var prJson;
-                try { prJson = JSON.parse(createOutput); } catch (e) { prJson = null; }
-                const prNum = prJson && prJson.number;
-                const prUrl = prJson && prJson.html_url;
-
-                if (!prNum) {
-                    throw new Error('Could not parse PR from API response: ' + createOutput.substring(0, 300));
+                if (!prResult || !prResult.success) {
+                    throw new Error((prResult && prResult.error) || 'SCM provider failed to create PR/MR');
                 }
 
-                console.log('✅ Created new PR #' + prNum + ' for rework');
-                pr = { number: prNum, html_url: prUrl, head: { ref: testBranchName } };
+                console.log('✅ Created new PR/MR #' + (prResult.number || '?') + ' for rework');
+                pr = { number: prResult.number, html_url: prResult.prUrl, head: { ref: testBranchName } };
             } catch (createErr) {
                 // PR creation failed — CLI is already on correct branch, postTestReworkResults will create PR
                 console.warn('PR auto-creation failed (CLI will run on correct branch, PR will be created post-rework):', createErr.toString());

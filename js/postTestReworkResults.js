@@ -47,23 +47,10 @@ function readResultJson() {
     }
 }
 
-function getGitHubRepoInfo() {
-    try {
-        const remoteUrl = cleanCommandOutput(
-            cli_execute_command({ command: 'git config --get remote.origin.url' }) || ''
-        );
-        const match = remoteUrl.match(/github\.com[:/]([^/]+)\/([^/?#\s]+)/);
-        if (!match) return null;
-        return { owner: match[1], repo: match[2].replace(/\.git$/, '') };
-    } catch (e) {
-        return null;
-    }
-}
-
-function findTestPRForTicket(workspace, repository, ticketKey) {
+function findTestPRForTicket(scm, ticketKey) {
     try {
         const branchName = 'test/' + ticketKey;
-        const openPRs = github_list_prs({ workspace: workspace, repository: repository, state: 'open' });
+        const openPRs = scm.listPrs('open') || [];
         const match = openPRs.filter(function(pr) {
             return pr.head && pr.head.ref && pr.head.ref === branchName;
         });
@@ -76,23 +63,20 @@ function findTestPRForTicket(workspace, repository, ticketKey) {
     }
 }
 
-function updatePullRequestBody(workspace, repository, prNumber, ticketKey, testStatus, bodyContent) {
+function updatePullRequestBody(scm, prNumber, ticketKey, testStatus, bodyContent) {
     if (!bodyContent) return false;
 
     try {
         const body = '## ' + ticketKey + ' Result: ' + testStatus.toUpperCase() + '\n\n' +
             '**Latest rework result:** `' + testStatus.toUpperCase() + '`\n\n' +
             '---\n\n' + bodyContent;
-        const payloadPath = 'pr_rework_body_' + ticketKey.replace(/[^A-Za-z0-9_-]/g, '_') + '.json';
-        file_write({
-            path: payloadPath,
-            content: JSON.stringify({ body: body })
-        });
-        cli_execute_command({
-            command: 'gh api --method PATCH repos/' + workspace + '/' + repository + '/pulls/' + prNumber + ' --input ' + payloadPath
-        });
-        console.log('✅ Updated PR body with latest test rework result');
-        return true;
+        if (scm.updatePrBody) {
+            scm.updatePrBody(prNumber, body);
+            console.log('✅ Updated PR/MR body with latest test rework result');
+            return true;
+        }
+        console.warn('SCM provider does not support updatePrBody — posting summary comment only');
+        return false;
     } catch (e) {
         console.warn('Failed to update PR body with latest rework result:', e.message || e);
         return false;
@@ -158,9 +142,9 @@ function commitAndPush(ticketKey, passed, config) {
     return branchName;
 }
 
-function createPRIfMissing(owner, repo, branchName, ticketKey, config) {
+function createPRIfMissing(scm, branchName, ticketKey, config) {
     try {
-        const openPRs = github_list_prs({ workspace: owner, repository: repo, state: 'open' });
+        const openPRs = scm.listPrs('open') || [];
         const existing = openPRs.filter(function(pr) {
             return pr.head && pr.head.ref === branchName;
         });
@@ -169,31 +153,26 @@ function createPRIfMissing(owner, repo, branchName, ticketKey, config) {
             return existing[0];
         }
 
-        console.log('No open PR found — creating one via gh api...');
+        console.log('No open PR/MR found — creating one via SCM provider...');
         var ticket;
         try { ticket = jira_get_ticket({ key: ticketKey }); } catch (e) { ticket = null; }
         const summary = ticket && ticket.fields ? (ticket.fields.summary || ticketKey) : ticketKey;
         const prTitle = ticketKey + ' ' + summary;
 
-        const prData = JSON.stringify({
+        if (!scm.createPr) {
+            throw new Error('Configured SCM provider does not support createPr');
+        }
+        const prResult = scm.createPr({
             title: prTitle,
             body: 'Auto-created PR after test rework.\n\nTicket: ' + ticketKey,
-            head: branchName,
-            base: config.git.baseBranch
+            branchName: branchName,
+            baseBranch: config.git.baseBranch
         });
-        file_write({ path: 'pr_post_rework_' + ticketKey + '.json', content: prData });
-
-        const createOutput = cli_execute_command({
-            command: 'gh api repos/' + owner + '/' + repo + '/pulls --input pr_post_rework_' + ticketKey + '.json'
-        }) || '';
-
-        var prJson;
-        try { prJson = JSON.parse(createOutput); } catch (e) { prJson = null; }
-        if (prJson && prJson.number) {
-            console.log('✅ Created PR #' + prJson.number + ' for', branchName);
-            return prJson;
+        if (prResult && prResult.success) {
+            console.log('✅ Created PR/MR #' + (prResult.number || '?') + ' for', branchName);
+            return { number: prResult.number, html_url: prResult.prUrl, head: { ref: branchName } };
         }
-        console.warn('Could not create PR:', createOutput.substring(0, 200));
+        console.warn('Could not create PR/MR:', prResult && prResult.error);
         return null;
     } catch (e) {
         console.warn('createPRIfMissing error:', e);
@@ -221,7 +200,7 @@ function resolveCustomParams(params, actualParams, config) {
     return merged;
 }
 
-function postThreadReplies(workspace, repository, pullRequestId) {
+function postThreadReplies(scm, pullRequestId) {
     const repliesJson = readFile('outputs/review_replies.json');
     if (!repliesJson) {
         console.warn('outputs/review_replies.json not found — skipping thread replies');
@@ -242,13 +221,10 @@ function postThreadReplies(workspace, repository, pullRequestId) {
     let posted = 0;
     replies.forEach(function(item) {
         try {
-            github_reply_to_pr_thread({
-                workspace: workspace,
-                repository: repository,
-                pullRequestId: String(pullRequestId),
-                inReplyToId: String(item.inReplyToId),
-                text: item.reply || '✅ Addressed.'
-            });
+            scm.replyToThread(pullRequestId, {
+                rootCommentId: item.inReplyToId,
+                threadId: item.threadId || item.discussionId
+            }, item.reply || '✅ Addressed.');
             posted++;
         } catch (e) {
             console.warn('Failed to reply to comment #' + item.inReplyToId + ':', e);
@@ -256,12 +232,7 @@ function postThreadReplies(workspace, repository, pullRequestId) {
 
         if (item.threadId) {
             try {
-                github_resolve_pr_thread({
-                    workspace: workspace,
-                    repository: repository,
-                    pullRequestId: String(pullRequestId),
-                    threadId: item.threadId
-                });
+                scm.resolveThread(pullRequestId, { threadId: item.threadId });
             } catch (e) {
                 console.warn('Failed to resolve thread', item.threadId + ':', e);
             }
@@ -276,6 +247,7 @@ function action(params) {
     const actualParams = params.ticket ? params : (params.jobParams || params);
     const ticketKey = actualParams.ticket.key;
     var config = configLoader.loadProjectConfig(params.jobParams || params);
+    var scm = configLoader.createScm(config);
     const customParams = resolveCustomParams(params, actualParams, config);
     const removeLabel = customParams && customParams.removeLabel;
     const wipLabel = actualParams.metadata && actualParams.metadata.contextId
@@ -364,35 +336,29 @@ function action(params) {
         }
 
         // Step 3: Ensure PR exists; create if missing (e.g. preCliJSAction failed to create it)
-        const repoInfo = getGitHubRepoInfo();
-        var pr = repoInfo ? findTestPRForTicket(repoInfo.owner, repoInfo.repo, ticketKey) : null;
-        if (!pr && repoInfo && branchName) {
-            pr = createPRIfMissing(repoInfo.owner, repoInfo.repo, branchName, ticketKey, config);
+        var pr = findTestPRForTicket(scm, ticketKey);
+        if (!pr && branchName) {
+            pr = createPRIfMissing(scm, branchName, ticketKey, config);
         }
 
-        if (pr && repoInfo) {
-            postThreadReplies(repoInfo.owner, repoInfo.repo, pr.number);
+        if (pr) {
+            postThreadReplies(scm, pr.number);
 
             // Post PR comment with fix summary + new test result (GitHub Markdown from pr_body.md)
             try {
                 const statusEmoji = passed ? '✅' : '❌';
                 const prBodyContent = readFile('outputs/pr_body.md') || fixSummary;
-                updatePullRequestBody(repoInfo.owner, repoInfo.repo, pr.number, ticketKey, testStatus, prBodyContent);
+                updatePullRequestBody(scm, pr.number, ticketKey, testStatus, prBodyContent);
                 const prComment = '## 🔧 Test Rework Complete — ' + ticketKey + '\n\n' +
                     '**Re-run result**: ' + statusEmoji + ' ' + testStatus.toUpperCase() + '\n\n' +
                     '---\n\n' + prBodyContent;
-                github_add_pr_comment({
-                    workspace: repoInfo.owner,
-                    repository: repoInfo.repo,
-                    pullRequestId: String(pr.number),
-                    text: prComment
-                });
+                scm.addComment(pr.number, prComment);
                 console.log('✅ Posted rework summary to PR');
             } catch (e) {
                 console.warn('Failed to post PR comment:', e);
             }
         } else {
-            console.warn('No PR found — skipping GitHub PR comment');
+            console.warn('No PR/MR found — skipping source-control comment');
         }
 
         // Step 4: Move ticket to In Review - Passed or In Review - Failed

@@ -8,13 +8,16 @@
 # Options:
 #   --config        PATH  repositories.json path (default: .dmtools/repositories.json)
 #   --dest          DIR   destination root dir   (default: ./dependencies)
-#   --token         VAR   name of env var holding the GitHub PAT (default: GH_TOKEN)
-#   --ado-token-var VAR   name of env var holding the ADO PAT   (default: ADO_GIT_TOKEN)
-#   --host          HOST  GitHub host            (default: github.com)
+#   --token            VAR   name of env var holding the GitHub PAT (default: GH_TOKEN)
+#   --ado-token-var    VAR   name of env var holding the ADO PAT    (default: ADO_GIT_TOKEN)
+#   --gitlab-token-var VAR   name of env var holding the GitLab PAT (default: GITLAB_TOKEN)
+#   --host             HOST  GitHub host            (default: github.com)
+#   --gitlab-host      HOST  GitLab host            (default: from GITLAB_BASE_PATH or gitlab.com)
 #   --filter        STR   git clone filter       (default: blob:none  — blobless)
 #
 # Provider detection (per repository entry):
 #   If an entry has "adoOrg" field → uses Azure DevOps clone URL
+#   Else if "provider":"gitlab" OR gitlabGroup/gitlabNamespace/gitlabHost is present → GitLab clone URL
 #   Otherwise → uses GitHub clone URL (existing behaviour)
 #
 # Config format (.dmtools/repositories.json):
@@ -30,17 +33,29 @@
 #           "repo": "ado-repo-name",
 #           "adoOrg": "MyOrg", "adoProject": "MyProject",
 #           "branch": "main", "envVar": "ADO_REPO_DIR"
+#         },
+#         {
+#           "provider": "gitlab",
+#           "repo": "dmtools-epamsample",
+#           "gitlabGroup": "mobile",
+#           "gitlabHost": "git.epam.com",
+#           "branch": "main",
+#           "envVar": "GITLAB_REPO_DIR"
 #         }
 #       ]
 #     }
 #   }
 #
 # Fields:
-#   repo       (required) — "org/repo-name" for GitHub, plain name for ADO
-#   branch     (optional) — default "main"
-#   envVar     (optional) — if set, exports {envVar}=<full-cloned-path> to CI
-#   adoOrg     (optional) — if set, entry is treated as an ADO repository
-#   adoProject (optional) — ADO project name (required when adoOrg is set)
+#   repo            (required) — "org/repo-name" for GitHub, plain name for ADO/GitLab
+#   branch          (optional) — default "main"
+#   envVar          (optional) — if set, exports {envVar}=<full-cloned-path> to CI
+#   adoOrg          (optional) — if set, entry is treated as an ADO repository
+#   adoProject      (optional) — ADO project name (required when adoOrg is set)
+#   provider        (optional) — "gitlab" to force GitLab mode for the entry
+#   gitlabGroup     (optional) — GitLab group/namespace when repo is plain name
+#   gitlabNamespace (optional) — alias of gitlabGroup
+#   gitlabHost      (optional) — host override for this entry
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -52,18 +67,28 @@ CONFIG_FILE=".dmtools/repositories.json"
 DEST_ROOT="./dependencies"
 TOKEN_VAR="GH_TOKEN"
 ADO_TOKEN_VAR="ADO_GIT_TOKEN"
+GITLAB_TOKEN_VAR="GITLAB_TOKEN"
 GH_HOST="github.com"
 GIT_FILTER="blob:none"
+GITLAB_HOST="${GITLAB_BASE_PATH:-gitlab.com}"
+GITLAB_HOST="${GITLAB_HOST#https://}"
+GITLAB_HOST="${GITLAB_HOST#http://}"
+GITLAB_HOST="${GITLAB_HOST%%/*}"
+if [ -z "${GITLAB_HOST}" ]; then
+  GITLAB_HOST="gitlab.com"
+fi
 
 shift 2>/dev/null || true
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --config)        CONFIG_FILE="$2";    shift 2 ;;
     --dest)          DEST_ROOT="$2";      shift 2 ;;
-    --token)         TOKEN_VAR="$2";      shift 2 ;;
-    --ado-token-var) ADO_TOKEN_VAR="$2";  shift 2 ;;
-    --host)          GH_HOST="$2";        shift 2 ;;
-    --filter)        GIT_FILTER="$2";     shift 2 ;;
+    --token)            TOKEN_VAR="$2";         shift 2 ;;
+    --ado-token-var)    ADO_TOKEN_VAR="$2";     shift 2 ;;
+    --gitlab-token-var) GITLAB_TOKEN_VAR="$2";  shift 2 ;;
+    --host)             GH_HOST="$2";           shift 2 ;;
+    --gitlab-host)      GITLAB_HOST="$2";       shift 2 ;;
+    --filter)           GIT_FILTER="$2";        shift 2 ;;
     -h|--help)
       sed -n '2,/^set -/p' "$0" | grep '^#' | sed 's/^# \{0,1\}//'
       exit 0 ;;
@@ -72,7 +97,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ -z "${PROJECT_KEY}" ]; then
-  echo "Usage: checkout.sh <project-key> [--config PATH] [--dest DIR] [--token VAR] [--ado-token-var VAR]" >&2
+  echo "Usage: checkout.sh <project-key> [--config PATH] [--dest DIR] [--token VAR] [--ado-token-var VAR] [--gitlab-token-var VAR] [--host HOST] [--gitlab-host HOST]" >&2
   exit 1
 fi
 
@@ -106,6 +131,7 @@ fi
 # ── Resolve tokens (lazy — only fail if needed during clone) ─────────────────
 GH_TOKEN="${!TOKEN_VAR:-}"
 ADO_TOKEN="${!ADO_TOKEN_VAR:-}"
+GITLAB_TOKEN="${!GITLAB_TOKEN_VAR:-}"
 
 mkdir -p "${DEST_ROOT}"
 
@@ -127,6 +153,9 @@ while IFS= read -r entry; do
   ENV_VAR="$( echo "${entry}" | jq -r '.envVar     // ""')"
   ADO_ORG="$( echo "${entry}" | jq -r '.adoOrg     // ""')"
   ADO_PROJ="$(echo "${entry}" | jq -r '.adoProject // ""')"
+  PROVIDER="$(echo "${entry}" | jq -r '.provider   // ""')"
+  GITLAB_GROUP="$(echo "${entry}" | jq -r '.gitlabGroup // .gitlabNamespace // ""')"
+  ENTRY_GITLAB_HOST="$(echo "${entry}" | jq -r '.gitlabHost // ""')"
 
   NAME="${REPO##*/}"    # last path component (works for both "org/repo" and plain "repo")
   DEST="${DEST_ROOT}/${NAME}"
@@ -151,6 +180,45 @@ while IFS= read -r entry; do
       echo "  ↻ updated"
     else
       git clone --branch "${BRANCH}" "${CLONE_URL}" "${DEST}"
+      echo "  ✅ cloned"
+    fi
+
+    # Keep token in remote URL so subsequent git push works from the agent
+    git -C "${DEST}" remote set-url origin "${CLONE_URL}"
+
+  elif [ "${PROVIDER}" = "gitlab" ] || [ -n "${GITLAB_GROUP}" ] || [ -n "${ENTRY_GITLAB_HOST}" ]; then
+    # ── GitLab entry ───────────────────────────────────────────────────────────
+    if [ -z "${GITLAB_TOKEN}" ]; then
+      echo "❌ GitLab token env var '${GITLAB_TOKEN_VAR}' is not set." >&2
+      exit 1
+    fi
+
+    CURRENT_GITLAB_HOST="${ENTRY_GITLAB_HOST:-${GITLAB_HOST}}"
+    REPO_PATH="${REPO}"
+    if [ "${REPO_PATH#*/}" = "${REPO_PATH}" ]; then
+      if [ -z "${GITLAB_GROUP}" ]; then
+        echo "❌ GitLab entry '${REPO}' requires gitlabGroup/gitlabNamespace when repo has no namespace." >&2
+        exit 1
+      fi
+      REPO_PATH="${GITLAB_GROUP}/${REPO}"
+    fi
+
+    CLONE_URL="https://oauth2:${GITLAB_TOKEN}@${CURRENT_GITLAB_HOST}/${REPO_PATH}.git"
+    DISPLAY_URL="https://${CURRENT_GITLAB_HOST}/${REPO_PATH}"
+    echo "▶ [GL] ${DISPLAY_URL} @ ${BRANCH} → ${DEST}"
+
+    if [ -d "${DEST}/.git" ]; then
+      git -C "${DEST}" remote set-url origin "${CLONE_URL}"
+      git -C "${DEST}" fetch --filter="${GIT_FILTER}" origin "${BRANCH}"
+      git -C "${DEST}" checkout "${BRANCH}"
+      git -C "${DEST}" pull origin "${BRANCH}" --ff-only 2>/dev/null || true
+      echo "  ↻ updated"
+    else
+      git clone \
+        --filter="${GIT_FILTER}" \
+        --branch "${BRANCH}" \
+        "${CLONE_URL}" \
+        "${DEST}"
       echo "  ✅ cloned"
     fi
 

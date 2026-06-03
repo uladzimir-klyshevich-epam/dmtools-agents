@@ -16,7 +16,9 @@
 
 function action(params) {
     try {
+        var configLoader = require('./configLoader.js');
         var jobParams = params.jobParams || {};
+        var projectConfig = configLoader.loadProjectConfig(params.jobParams || params);
         // params.inputJql (from Jira encoded_config) takes priority over jobParams default
         var inputJql = params.inputJql || jobParams.inputJql || '';
         var bb = jobParams.bitriseBuild || {};
@@ -78,7 +80,11 @@ function action(params) {
         var featurePrUrl = '';
         if (featureOwner && featureRepo) {
             try {
-                var prs = github_list_prs({ workspace: featureOwner, repository: featureRepo, state: 'open' });
+                var featureScm = configLoader.createScm({
+                    scm: projectConfig.scm,
+                    repository: { owner: featureOwner, repo: featureRepo }
+                });
+                var prs = featureScm.listPrs('open');
                 if (prs && prs.length > 0) {
                     for (var i = 0; i < prs.length; i++) {
                         var pr = prs[i];

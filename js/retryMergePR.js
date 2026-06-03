@@ -156,7 +156,15 @@ function action(params) {
     }
 
     // GitHub hasn't computed mergeability yet, or CI checks still running — retry next cycle
-    if (mergeable === null || mergeableState === 'unknown' || mergeableState === 'blocked' || mergeableState === 'unstable') {
+    if (mergeable === null ||
+        mergeableState === 'unknown' ||
+        mergeableState === 'blocked' ||
+        mergeableState === 'unstable' ||
+        mergeableState === 'checking' ||
+        mergeableState === 'unchecked' ||
+        mergeableState === 'preparing' ||
+        mergeableState === 'ci_must_pass' ||
+        mergeableState === 'ci_still_running') {
         console.log('PR not ready to merge (' + mergeableState + ') — will retry next cycle');
         return false;
     }
@@ -165,7 +173,11 @@ function action(params) {
     if (mergeableState === 'behind') {
         console.log('PR branch is behind base — requesting branch update');
         try {
-            cli_execute_command({ command: 'gh api repos/' + owner + '/' + repo + '/pulls/' + prNumber + '/update-branch -X PUT' });
+            if (scm.updateBranch) {
+                scm.updateBranch(prNumber, owner, repo);
+            } else {
+                throw new Error('SCM provider does not support updateBranch');
+            }
             console.log('Branch update requested — will retry merge next cycle after CI passes');
         } catch (updateErr) {
             console.warn('Could not update branch (may already be updating):', updateErr);
@@ -174,7 +186,9 @@ function action(params) {
     }
 
     // Conflict detected before attempting merge
-    if (mergeable === false && mergeableState === 'dirty') {
+    if ((mergeable === false && mergeableState === 'dirty') ||
+        mergeableState === 'cannot_be_merged' ||
+        mergeableState === 'conflict') {
         console.log('PR has merge conflict — moving ticket to In Rework');
         removeApprovedLabels(scm, prNumber, ticketKey);
         releaseLock(ticketKey, customParams);

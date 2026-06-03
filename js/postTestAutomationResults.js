@@ -183,13 +183,14 @@ function performGitOperations(branchName, commitMessage, workingDir, testFilesPa
     }
 }
 
-function createPullRequest(title, branchName, baseBranch, workingDir) {
+function createPullRequest(title, branchName, baseBranch, workingDir, scm) {
     console.log('Creating Pull Request...');
     return prHelper.createPullRequest({
         title: title,
         branchName: branchName,
         baseBranch: baseBranch,
         workingDir: workingDir,
+        scm: scm,
         bodyFileCandidates: ['outputs/pr_body.md', 'outputs/response.md'],
         defaultBody: 'Automated test automation changes.',
         runCommand: runInRepo,
@@ -232,6 +233,7 @@ function action(params) {
         const projectKey = ticketKey.split('-')[0];
         var config = configLoader.loadProjectConfig(params.jobParams || params);
         var customParams = (params.jobParams || params).customParams || {};
+        var scm = configLoader.createScm(config);
         var workingDir = config.workingDir || null;
         var testFilesPath = customParams.testFilesGlob || 'testing/';
         const jiraComment = readJiraComment(params, workingDir);
@@ -326,7 +328,7 @@ function action(params) {
 
             if (gitResult.success && !gitResult.noNewCommit) {
                 const prTitle = configLoader.formatTemplate(config.formats.prTitle.testAutomation, {ticketKey: ticketKey, ticketSummary: ticketSummary});
-                const prResult = createPullRequest(prTitle, branchName, config.git.baseBranch, workingDir);
+                const prResult = createPullRequest(prTitle, branchName, config.git.baseBranch, workingDir, scm);
                 prUrl = prResult.prUrl;
                 if (!prResult.success || !prUrl) {
                     // PR creation failed — branch has code but no PR; post comment and reset to Backlog for retry

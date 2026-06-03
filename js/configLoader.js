@@ -112,7 +112,7 @@ var DEFAULTS = {
     globalAdditionalInstructions: [],
 
     scm: {
-        provider: 'github'   // 'github' | 'ado' — source control provider for PR operations
+        provider: 'github'   // 'github' | 'gitlab' | 'ado' — source control provider for PR/MR operations
     }
 };
 

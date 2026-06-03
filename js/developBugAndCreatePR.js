@@ -54,6 +54,7 @@ function action(params) {
         const actualParams = params.ticket ? params : (params.jobParams || params);
         const ticketKey = actualParams.ticket.key;
         var config = configLoader.loadProjectConfig(params.jobParams || params);
+        var scm = configLoader.createScm(config);
         const _customParams = (params.jobParams && params.jobParams.customParams) || actualParams.customParams;
         const statuses = resolveStatuses(_customParams);
 
@@ -65,22 +66,17 @@ function action(params) {
         // Move to In Review now and skip development entirely.
         const expectedBranch = configLoader.resolveBranchName(config, actualParams.ticket, 'development');
         try {
-            const existingPrJson = cli_execute_command({
-                command: 'gh pr list --head ' + expectedBranch + ' --state open --json url,number --jq ".[0]"'
-            }) || '';
-            const cleanedPrJson = existingPrJson.split('\n').filter(function(l) {
-                return l.trim() && l.indexOf('Script started') === -1 && l.indexOf('Script done') === -1;
-            }).join('').trim();
-            if (cleanedPrJson && cleanedPrJson !== 'null') {
-                let existingPr = null;
-                try { existingPr = JSON.parse(cleanedPrJson); } catch (e) {}
-                if (existingPr && existingPr.url) {
-                    console.log('⚠️  PR already open for', ticketKey, ':', existingPr.url, '— skipping re-development');
+            var existingPr = (scm.listPrs('open') || []).filter(function(pr) {
+                return pr && pr.head && pr.head.ref === expectedBranch;
+            })[0];
+            if (existingPr) {
+                    var existingUrl = existingPr.html_url || existingPr.url || ('#' + existingPr.number);
+                    console.log('⚠️  PR already open for', ticketKey, ':', existingUrl, '— skipping re-development');
                     try {
                         jira_post_comment({
                             key: ticketKey,
                             comment: 'h3. ℹ️ PR Already Open\n\n' +
-                                'A pull request already exists for this ticket: ' + existingPr.url + '\n\n' +
+                                'A pull/merge request already exists for this ticket: ' + existingUrl + '\n\n' +
                                 'Moved ticket to *In Review* for review.'
                         });
                     } catch (e) {}
@@ -90,7 +86,6 @@ function action(params) {
                     } catch (e) { console.warn('Failed to move to In Review:', e); }
                     removeLabels(ticketKey, params);
                     return { success: true, path: 'pr_already_open', ticketKey };
-                }
             }
         } catch (prCheckErr) {
             console.warn('Could not check existing PRs (non-fatal):', prCheckErr);

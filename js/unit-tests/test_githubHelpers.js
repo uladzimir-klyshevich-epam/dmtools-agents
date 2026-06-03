@@ -281,3 +281,125 @@ suite('githubHelpers.fetchDiscussionsAndRawData — resolved thread detection', 
         assert.equal(t.resolved, false);
     });
 });
+
+suite('scm GitLab provider', function() {
+
+    test('createScm auto-detects nested GitLab repository names', function() {
+        var calls = [];
+        var scmModule = loadScm({
+            cli_execute_command: function() {
+                return 'git@git.epam.com:mobile/dmtools-epamsample.git\nCOMMAND_EXIT_CODE=0';
+            },
+            gitlab_list_mrs: function(args) {
+                calls.push(args);
+                return [];
+            }
+        });
+
+        var scm = scmModule.createScm({ scm: { provider: 'gitlab' } });
+        scm.listPrs('open');
+
+        assert.deepEqual(calls[0], {
+            workspace: 'mobile',
+            repository: 'dmtools-epamsample',
+            state: 'opened'
+        });
+    });
+
+    test('listPrs closed returns only closed/merged merge requests', function() {
+        var scmModule = loadScm({
+            gitlab_list_mrs: function() {
+                return JSON.stringify([
+                    { iid: 1, state: 'opened', source_branch: 'f1', target_branch: 'main' },
+                    { iid: 2, state: 'closed', source_branch: 'f2', target_branch: 'main' },
+                    { iid: 3, state: 'merged', merged_at: '2026-06-01T00:00:00Z', source_branch: 'f3', target_branch: 'main' }
+                ]);
+            }
+        });
+
+        var provider = scmModule._createGitLabProvider('mobile', 'dmtools-epamsample');
+        var closed = provider.listPrs('closed');
+
+        assert.equal(closed.length, 2);
+        assert.equal(closed[0].state, 'closed');
+        assert.equal(closed[1].state, 'merged');
+    });
+
+    test('createPr delegates to gitlab_create_mr and returns normalized result', function() {
+        var call = null;
+        var scmModule = loadScm({
+            gitlab_create_mr: function(args) {
+                call = args;
+                return JSON.stringify({
+                    iid: 42,
+                    web_url: 'https://git.epam.com/mobile/dmtools-epamsample/-/merge_requests/42',
+                    source_branch: 'feature/ABC-1',
+                    target_branch: 'main'
+                });
+            }
+        });
+
+        var provider = scmModule._createGitLabProvider('mobile', 'dmtools-epamsample');
+        var result = provider.createPr({
+            title: 'ABC-1: change',
+            branchName: 'feature/ABC-1',
+            baseBranch: 'main',
+            body: 'Description',
+            removeSourceBranch: true
+        });
+
+        assert.deepEqual(call, {
+            workspace: 'mobile',
+            repository: 'dmtools-epamsample',
+            sourceBranch: 'feature/ABC-1',
+            targetBranch: 'main',
+            title: 'ABC-1: change',
+            description: 'Description',
+            removeSourceBranch: 'true'
+        });
+        assert.equal(result.success, true);
+        assert.equal(result.number, 42);
+        assert.equal(result.prUrl, 'https://git.epam.com/mobile/dmtools-epamsample/-/merge_requests/42');
+    });
+
+    test('listWorkflowRuns maps GitLab run statuses to workflow_runs payload', function() {
+        var call = null;
+        var scmModule = loadScm({
+            gitlab_list_pipeline_runs: function(args) {
+                call = args;
+                return JSON.stringify([
+                    { id: 1001, status: 'running', ref: 'main', name: 'CI' },
+                    { id: 1002, status: 'failed', ref: 'main', name: 'CI' }
+                ]);
+            }
+        });
+        var provider = scmModule._createGitLabProvider('mobile', 'dmtools-epamsample');
+        var raw = provider.listWorkflowRuns('in_progress', null, 20);
+        var parsed = JSON.parse(raw);
+
+        assert.equal(call.status, 'running');
+        assert.equal(call.limit, '20');
+        assert.equal(parsed.workflow_runs.length, 2);
+        assert.equal(parsed.workflow_runs[0].status, 'in_progress');
+        assert.equal(parsed.workflow_runs[0].run_number, 1001);
+    });
+
+    test('updateBranch delegates to gitlab_rebase_mr', function() {
+        var call = null;
+        var scmModule = loadScm({
+            gitlab_rebase_mr: function(args) {
+                call = args;
+                return '{"rebase_in_progress":true}';
+            }
+        });
+
+        var provider = scmModule._createGitLabProvider('mobile', 'dmtools-epamsample');
+        provider.updateBranch(55, 'mobile', 'dmtools-epamsample');
+
+        assert.deepEqual(call, {
+            workspace: 'mobile',
+            repository: 'dmtools-epamsample',
+            pullRequestId: '55'
+        });
+    });
+});

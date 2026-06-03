@@ -64,6 +64,7 @@ function action(params) {
         }
 
         var actualParams = params.ticket ? params : (params.jobParams || params);
+        var projectConfig = configLoader.loadProjectConfig(params.jobParams || params);
         var ticketKey = actualParams.ticket.key;
         var ticketSummary = (actualParams.ticket.fields && actualParams.ticket.fields.summary) || ticketKey;
         var customParams = (params.jobParams && params.jobParams.customParams) || (params.jobParams && params.jobParams) || actualParams.customParams || {};
@@ -94,7 +95,11 @@ function action(params) {
 
         if (featureOwner && featureRepo) {
             try {
-                var prs = github_list_prs({ workspace: featureOwner, repository: featureRepo, state: 'open' });
+                var featureScm = configLoader.createScm({
+                    scm: projectConfig.scm,
+                    repository: { owner: featureOwner, repo: featureRepo }
+                });
+                var prs = featureScm.listPrs('open');
                 if (prs && prs.length > 0) {
                     for (var i = 0; i < prs.length; i++) {
                         var pr = prs[i];

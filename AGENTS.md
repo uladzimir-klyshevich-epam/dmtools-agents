@@ -102,6 +102,49 @@ Project repos customize agent behavior through `.dmtools/config.js` fields:
 - `instructionOverrides.<contextId>` — replace agentParams.instructions
 - `agentParamPatches.<contextId>` — patch agentParams fields
 
+### SM rules override and custom agents
+`js/smAgent.js` supports full and partial SM customization from `.dmtools/config.js`.
+
+**Precedence**
+- Base rules come from `sm.json` (`jobParams.rules`)
+- If `config.smRules` is set, it **fully replaces** base rules
+- If `config.smRuleOverrides` is set, it patches rules by `configFile`
+
+**Common use cases**
+- Disable most default rules and keep only one:
+```js
+module.exports = {
+  smRuleOverrides: {
+    "agents/story_questions.json": { enabled: true },
+    "agents/story_development.json": { enabled: false },
+    "agents/pr_review.json": { enabled: false }
+  }
+};
+```
+
+- Full replacement with custom agents:
+```js
+module.exports = {
+  smRules: [
+    {
+      description: "Run only custom intake flow",
+      jql: "project = {jiraProject} AND issuetype = Story AND status = 'To Do'",
+      configFile: "agents/my_custom_intake.json",
+      skipIfLabel: "sm_my_custom_intake_triggered",
+      addLabel: "sm_my_custom_intake_triggered",
+      enabled: true
+    }
+  ]
+};
+```
+
+**Rule fields supported by SM**
+- `description`, `jql`, `configFile` (required for practical execution)
+- `enabled` (set `false` to disable)
+- `skipIfLabel` / `skipIfLabels`, `addLabel`
+- `targetStatus`, `limit`, `localExecution`
+- `configPath` (per-rule project config override for multi-project orchestration)
+
 ### Output JSON discipline
 When agents produce JSON output files, keep them compact (status, IDs, paths, short summaries). Put large text in separate `.md` files and reference them by path.
 
