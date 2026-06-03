@@ -32,6 +32,25 @@ if [ $# -lt 1 ]; then
   exit 1
 fi
 
+record_codegraph_usage() {
+  local log_file="$1"
+  if [ ! -s "$log_file" ]; then
+    return 0
+  fi
+
+  local matches
+  matches="$(grep -E '(^|[[:space:];|&])codegraph[[:space:]]+(context|query|callees|callers|impact|node|files|sync|affected|status)([[:space:]]|$)' "$log_file" || true)"
+  if [ -z "$matches" ]; then
+    return 0
+  fi
+
+  mkdir -p .dmtools
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    printf '%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$line" >> .dmtools/codegraph-usage.log
+  done <<< "$matches"
+}
+
 # --skip: print prompt and exit without running any agent (for post-action testing)
 for arg in "$@"; do
   if [ "$arg" = "--skip" ]; then
@@ -146,8 +165,50 @@ elif [ "$PROVIDER" = "copilot" ]; then
     exit 1
   fi
 
+  COPILOT_DEFAULT_MODEL="${COPILOT_DEFAULT_MODEL:-gpt-5-mini}"
+  COPILOT_MODEL_VALUE="${COPILOT_MODEL:-$COPILOT_DEFAULT_MODEL}"
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [ "${COPILOT_SESSION_ENABLED:-true}" != "false" ] && [ -f "${SCRIPT_DIR}/../setup/copilot-session.sh" ]; then
+    # shellcheck source=/dev/null
+    source "${SCRIPT_DIR}/../setup/copilot-session.sh" env
+  fi
+
+  COPILOT_CMD=(copilot)
+  if ! command -v copilot >/dev/null 2>&1; then
+    COPILOT_CMD=(npx @github/copilot@1.0.44)
+  fi
+
+  copilot_supports_flag() {
+    "${COPILOT_CMD[@]}" --help 2>/dev/null | grep -q -- "$1"
+  }
+
+  COPILOT_SESSION_ARGS=()
+  COPILOT_SESSION_MODE="none"
+  COPILOT_HAS_RESUME_ARG=false
+  for pass_arg in "${PASS_ARGS[@]:-}"; do
+    case "${pass_arg}" in
+      --continue|--resume|--resume=*|--session-id|--session-id=*)
+        COPILOT_HAS_RESUME_ARG=true
+        ;;
+    esac
+  done
+  if [ "${COPILOT_SESSION_ENABLED:-true}" != "false" ] && [ "${COPILOT_HAS_RESUME_ARG}" = "false" ] && [ -n "${COPILOT_SESSION_ID:-}" ]; then
+    if [ -n "${COPILOT_SESSION_NAME:-}" ]; then
+      COPILOT_SESSION_ARGS=(--resume "${COPILOT_SESSION_NAME}")
+      COPILOT_SESSION_MODE="resume-name"
+      echo "Copilot session restore enabled; trying --resume ${COPILOT_SESSION_NAME} first"
+    elif copilot_supports_flag "--session-id"; then
+      COPILOT_SESSION_ARGS=(--session-id "${COPILOT_SESSION_ID}")
+      COPILOT_SESSION_MODE="session-id"
+    fi
+  fi
+
   echo "Copilot Configuration:"
-  echo "  Model: ${COPILOT_MODEL:-gpt-5-mini}"
+  echo "  Model: ${COPILOT_MODEL_VALUE}"
+  if [ -n "${COPILOT_SESSION_ID:-}" ]; then
+    echo "  Session: ${COPILOT_SESSION_NAME:-${COPILOT_SESSION_ID}} (${COPILOT_SESSION_GROUP:-default})"
+    echo "  COPILOT_HOME: ${COPILOT_HOME:-}"
+  fi
   echo "Working directory: $(pwd)"
   echo ""
 
@@ -156,21 +217,135 @@ elif [ "$PROVIDER" = "copilot" ]; then
   # stdin when it is not a TTY (e.g. inside CI pipes). The prompt file path is already
   # available as $PROMPT_ARG when DMTools calls this script with cliPrompt.
   # PASS_ARGS support: flags like --continue --resume are forwarded to the copilot CLI.
-  COPILOT_CMD=(copilot)
-  if ! command -v copilot >/dev/null 2>&1; then
-    COPILOT_CMD=(npx @github/copilot@1.0.44)
-  fi
-  if [ -f "${PROMPT_ARG}" ]; then
-    echo "Running: ${COPILOT_CMD[*]} --allow-all --model ${COPILOT_MODEL:-gpt-5-mini} ${PASS_ARGS[*]:-} (prompt: ${PROMPT_BYTES} bytes via stdin)"
-    echo ""
-    "${COPILOT_CMD[@]}" --allow-all --model "${COPILOT_MODEL:-gpt-5-mini}" ${PASS_ARGS[@]+"${PASS_ARGS[@]}"} < "${PROMPT_ARG}"
-  else
-    echo "Running: ${COPILOT_CMD[*]} --allow-all --model ${COPILOT_MODEL:-gpt-5-mini} ${PASS_ARGS[*]:-} -p <inline prompt>"
-    echo ""
-    "${COPILOT_CMD[@]}" --allow-all --model "${COPILOT_MODEL:-gpt-5-mini}" ${PASS_ARGS[@]+"${PASS_ARGS[@]}"} -p "${PROMPT}"
-  fi
+  copilot_should_use_prompt_flag() {
+    if [ "${COPILOT_SESSION_MODE:-none}" != "none" ]; then
+      return 0
+    fi
 
-  exit_code=$?
+    for pass_arg in "${PASS_ARGS[@]:-}"; do
+      case "${pass_arg}" in
+        --continue|--resume|--resume=*|--session-id|--session-id=*|--name|--name=*)
+          return 0
+          ;;
+      esac
+    done
+
+    return 1
+  }
+
+  run_copilot_once() {
+    local log_file="$1"
+    local model="$2"
+
+    set +e
+    if copilot_should_use_prompt_flag; then
+      echo "Running: ${COPILOT_CMD[*]} --allow-all --model ${model} ${COPILOT_SESSION_ARGS[*]:-} ${PASS_ARGS[*]:-} -p <prompt:${PROMPT_BYTES} bytes>"
+      echo ""
+      "${COPILOT_CMD[@]}" --allow-all --model "${model}" ${COPILOT_SESSION_ARGS[@]+"${COPILOT_SESSION_ARGS[@]}"} ${PASS_ARGS[@]+"${PASS_ARGS[@]}"} -p "${PROMPT}" 2>&1 | tee "$log_file"
+    elif [ -f "${PROMPT_ARG}" ]; then
+      echo "Running: ${COPILOT_CMD[*]} --allow-all --model ${model} ${COPILOT_SESSION_ARGS[*]:-} ${PASS_ARGS[*]:-} (prompt: ${PROMPT_BYTES} bytes via stdin)"
+      echo ""
+      "${COPILOT_CMD[@]}" --allow-all --model "${model}" ${COPILOT_SESSION_ARGS[@]+"${COPILOT_SESSION_ARGS[@]}"} ${PASS_ARGS[@]+"${PASS_ARGS[@]}"} < "${PROMPT_ARG}" 2>&1 | tee "$log_file"
+    else
+      echo "Running: ${COPILOT_CMD[*]} --allow-all --model ${model} ${COPILOT_SESSION_ARGS[*]:-} ${PASS_ARGS[*]:-} -p <inline prompt>"
+      echo ""
+      "${COPILOT_CMD[@]}" --allow-all --model "${model}" ${COPILOT_SESSION_ARGS[@]+"${COPILOT_SESSION_ARGS[@]}"} ${PASS_ARGS[@]+"${PASS_ARGS[@]}"} -p "${PROMPT}" 2>&1 | tee "$log_file"
+    fi
+    local status=${PIPESTATUS[0]}
+    return "$status"
+  }
+
+  retry_copilot_session_selection() {
+    local log_file="$1"
+    local model="$2"
+    local resume_id=""
+
+    if [ "${COPILOT_SESSION_MODE}" != "resume-name" ]; then
+      return 1
+    fi
+
+    if grep -Eiq "No session, task, or name matched" "$log_file"; then
+      echo ""
+      echo "Copilot session ${COPILOT_SESSION_NAME} was not found; starting a new named session"
+      COPILOT_SESSION_ARGS=(--name "${COPILOT_SESSION_NAME}")
+      COPILOT_SESSION_MODE="name"
+    elif grep -Eiq "Multiple sessions match the name" "$log_file"; then
+      resume_id="$(grep -Eo '^[[:space:]]+[0-9a-fA-F-]{36}[[:space:]]*$' "$log_file" | head -n 1 | tr -d '[:space:]')"
+      if [ -z "${resume_id}" ]; then
+        echo "Copilot reported multiple matching sessions, but no session id could be parsed"
+        return 1
+      fi
+      echo ""
+      echo "Copilot found multiple sessions named ${COPILOT_SESSION_NAME}; resuming first match ${resume_id}"
+      COPILOT_SESSION_ARGS=(--resume "${resume_id}")
+      COPILOT_SESSION_MODE="resume-id"
+    else
+      return 1
+    fi
+
+    record_codegraph_usage "$log_file"
+    set +e
+    run_copilot_once "$log_file" "$model"
+    exit_code=$?
+    set -e
+    return 0
+  }
+
+  max_attempts="${COPILOT_RATE_LIMIT_RETRIES:-2}"
+  retry_delay="${COPILOT_RATE_LIMIT_RETRY_DELAY_SECONDS:-90}"
+  attempt=1
+  exit_code=1
+
+  while [ "$attempt" -le "$max_attempts" ]; do
+    copilot_log="$(mktemp)"
+    set +e
+    run_copilot_once "$copilot_log" "$COPILOT_MODEL_VALUE"
+    exit_code=$?
+    set -e
+
+    if [ "$exit_code" -ne 0 ] && retry_copilot_session_selection "$copilot_log" "$COPILOT_MODEL_VALUE"; then
+      :
+    fi
+
+    if [ "$exit_code" -eq 0 ]; then
+      record_codegraph_usage "$copilot_log"
+      rm -f "$copilot_log"
+      break
+    fi
+
+    if grep -Eiq 'Model ".+" from --model flag is not available' "$copilot_log" && [ "$COPILOT_MODEL_VALUE" != "$COPILOT_DEFAULT_MODEL" ]; then
+      echo ""
+      echo "Copilot model ${COPILOT_MODEL_VALUE} is unavailable; retrying with ${COPILOT_DEFAULT_MODEL}"
+      record_codegraph_usage "$copilot_log"
+      rm -f "$copilot_log"
+      copilot_log="$(mktemp)"
+      set +e
+      run_copilot_once "$copilot_log" "$COPILOT_DEFAULT_MODEL"
+      exit_code=$?
+      set -e
+      COPILOT_MODEL_VALUE="$COPILOT_DEFAULT_MODEL"
+      if [ "$exit_code" -eq 0 ]; then
+        record_codegraph_usage "$copilot_log"
+        rm -f "$copilot_log"
+        break
+      fi
+    fi
+
+    if grep -Eiq "rate limit|limit reset|You've hit your rate limit" "$copilot_log" && [ "$attempt" -lt "$max_attempts" ]; then
+      echo ""
+      echo "Copilot rate limit detected; retrying in ${retry_delay}s (attempt $((attempt + 1))/${max_attempts})"
+      record_codegraph_usage "$copilot_log"
+      rm -f "$copilot_log"
+      sleep "$retry_delay"
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    record_codegraph_usage "$copilot_log"
+    rm -f "$copilot_log"
+    break
+  done
+
   echo ""
   echo "=== Agent completed with exit code: $exit_code ==="
   exit $exit_code
@@ -201,9 +376,13 @@ echo "Running: ${CMD[*]}"
 echo ""
 
 # Execute Command
-"${CMD[@]}"
-
-exit_code=$?
+agent_log="$(mktemp)"
+set +e
+"${CMD[@]}" 2>&1 | tee "$agent_log"
+exit_code=${PIPESTATUS[0]}
+set -e
+record_codegraph_usage "$agent_log"
+rm -f "$agent_log"
 
 echo ""
 echo "=== Agent completed with exit code: $exit_code ==="

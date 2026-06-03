@@ -21,7 +21,7 @@
  *
  * For newBugs:  create bug, link all linkedTCs, move linkedTCs to "Bug To Fix"
  * For links:    link TC to existing bug, move TC to "Bug To Fix"
- * For skipped:  add sm_bug_creation_triggered label, keep TC in Failed
+ * For skipped:  move TC to In Rework so test automation can be fixed
  */
 
 const { STATUSES, LABELS } = require('./config.js');
@@ -70,6 +70,47 @@ function linkBugToTC(tcKey, bugKey) {
     console.log('  ✅ Linked:', bugKey, 'blocks', tcKey);
 }
 
+function extractTickets(result) {
+    if (!result) return [];
+    if (Array.isArray(result)) return result;
+    if (typeof result === 'string') {
+        try {
+            var parsed = JSON.parse(result);
+            return extractTickets(parsed);
+        } catch (e) {
+            return [];
+        }
+    }
+    if (Array.isArray(result.issues)) return result.issues;
+    if (Array.isArray(result.data)) return result.data;
+    if (Array.isArray(result.results)) return result.results;
+    return [];
+}
+
+function findLinkedNonDoneBug(tcKey) {
+    if (!tcKey || typeof jira_search_by_jql !== 'function') return null;
+    try {
+        var result = jira_search_by_jql({
+            jql: 'issue in linkedIssues("' + tcKey + '") AND issuetype = Bug AND status not in (Done)',
+            fields: ['key', 'summary', 'status'],
+            maxResults: 1
+        });
+        var tickets = extractTickets(result);
+        return tickets.length > 0 ? (tickets[0].key || null) : null;
+    } catch (e) {
+        console.warn('  ⚠️ Could not live-check linked non-Done bugs for', tcKey, e);
+        return null;
+    }
+}
+
+function findAnyLinkedNonDoneBug(tcKeys) {
+    for (var i = 0; i < tcKeys.length; i++) {
+        var bugKey = findLinkedNonDoneBug(tcKeys[i]);
+        if (bugKey) return bugKey;
+    }
+    return null;
+}
+
 function moveToBugToFix(tcKey) {
     try {
         jira_move_to_status({ key: tcKey, statusName: STATUSES.BUG_TO_FIX || 'Bug To Fix' });
@@ -105,11 +146,30 @@ function removeTriggerLabel(ticketKey, label) {
     }
 }
 
+function removeProcessingLabels(tcKey, labels) {
+    labels.forEach(function(label) {
+        removeTriggerLabel(tcKey, label);
+    });
+}
+
+function markResolved(resolvedSet, tcKey) {
+    if (tcKey) resolvedSet[tcKey] = true;
+}
+
+function moveFailedTcToRework(tcKey) {
+    jira_move_to_status({ key: tcKey, statusName: STATUSES.IN_REWORK || 'In Rework' });
+    console.log('  🔧 Moved to ' + (STATUSES.IN_REWORK || 'In Rework') + ':', tcKey);
+    try {
+        jira_remove_label({ key: tcKey, label: 'sm_test_automation_triggered' });
+    } catch (e) {}
+}
+
 function action(params) {
     try {
         var actualParams = params.jobParams || params;
         var customParams = actualParams.customParams || {};
         var triggerLabel = customParams.removeLabel || 'sm_bug_creation_triggered';
+        var smTriggerLabel = customParams.smTriggerLabel || 'sm_bulk_bugs_creation_triggered';
 
         console.log('=== Processing bulk bug creation decisions ===');
 
@@ -119,7 +179,6 @@ function action(params) {
 
             // Remove SM trigger label so SM can re-dispatch on next run
             var triggerTicketKey = (actualParams.ticket && actualParams.ticket.key) || null;
-            var smTriggerLabel = customParams.smTriggerLabel || 'sm_bulk_bugs_creation_triggered';
             removeTriggerLabel(triggerTicketKey, smTriggerLabel);
 
             // Try feedback loop resume — tell agent to produce the output file
@@ -148,15 +207,31 @@ function action(params) {
         var newBugs = decisions.newBugs || [];
         var links = decisions.links || [];
         var skipped = decisions.skipped || [];
+        var fixedByBug = decisions.fixedByBug || [];
 
-        console.log('Decisions: ' + newBugs.length + ' new bugs, ' + links.length + ' links, ' + skipped.length + ' skipped');
+        if (fixedByBug.length > 0) {
+            console.error('❌ fixedByBug is not supported for bulk bug creation; Done bugs are excluded from matching');
+            fixedByBug.forEach(function(fixDef) {
+                if (fixDef && fixDef.tcKey) {
+                    removeProcessingLabels(fixDef.tcKey, [triggerLabel, smTriggerLabel]);
+                }
+            });
+            return {
+                success: false,
+                error: 'fixedByBug is not supported; create or link a non-Done bug, or skip only confirmed test-code issues'
+            };
+        }
+
+        console.log('Decisions: ' + newBugs.length + ' new bugs, ' + links.length + ' links, ' +
+            skipped.length + ' skipped');
         console.log('Processed TCs: ' + processed.join(', '));
 
-        var results = { created: [], linked: [], skipped: [], errors: [] };
+        var results = { created: [], linked: [], skipped: [], released: [], errors: [] };
 
         // Build a set of processed TC keys for safety check
         var processedSet = {};
         processed.forEach(function(k) { processedSet[k] = true; });
+        var resolvedSet = {};
 
         // ── 1. Create new bugs and link their TCs ─────────────────────────────
         newBugs.forEach(function(bugDef, idx) {
@@ -179,6 +254,32 @@ function action(params) {
 
             var linkedTCs = bugDef.linkedTCs || [];
             console.log('  Creating bug:', summary, '| links to:', linkedTCs.join(', '));
+
+            var existingBugKey = findAnyLinkedNonDoneBug(linkedTCs);
+            if (existingBugKey) {
+                console.log('  🔁 Existing linked non-Done bug found during live re-check:', existingBugKey);
+                linkedTCs.forEach(function(tcKey) {
+                    if (!processedSet[tcKey]) {
+                        console.warn('  ⚠️ TC', tcKey, 'not in processed list — skipping (safety guard)');
+                        return;
+                    }
+                    try {
+                        linkBugToTC(tcKey, existingBugKey);
+                        moveToBugToFix(tcKey);
+                        removeProcessingLabels(tcKey, [triggerLabel, smTriggerLabel]);
+                        postComment(tcKey,
+                            'h3. 🔗 Existing Bug Linked (Batch Live Re-check)\n\n' +
+                            'Linked to existing non-Done bug: *' + existingBugKey + '*'
+                        );
+                        results.linked.push({ tcKey: tcKey, bugKey: existingBugKey, source: 'live_recheck' });
+                        markResolved(resolvedSet, tcKey);
+                    } catch (e) {
+                        console.error('  ❌ Failed to link', tcKey, '→', existingBugKey, ':', e);
+                        results.errors.push({ tcKey: tcKey, bugKey: existingBugKey, error: e.toString() });
+                    }
+                });
+                return;
+            }
 
             var bugKey = null;
             try {
@@ -209,13 +310,14 @@ function action(params) {
                 try {
                     linkBugToTC(tcKey, bugKey);
                     moveToBugToFix(tcKey);
-                    addTriggerLabel(tcKey, triggerLabel);
+                    removeProcessingLabels(tcKey, [triggerLabel, smTriggerLabel]);
                     postComment(tcKey,
                         'h3. 🐛 New Bug Created (Batch)\n\n' +
                         'Created: *' + bugKey + '*\n' +
                         '*Summary*: ' + summary
                     );
                     results.created.push({ tcKey: tcKey, bugKey: bugKey });
+                    markResolved(resolvedSet, tcKey);
                 } catch (e) {
                     console.error('  ❌ Failed to process TC', tcKey, ':', e);
                     results.errors.push({ tcKey: tcKey, bugKey: bugKey, error: e.toString() });
@@ -241,19 +343,20 @@ function action(params) {
             try {
                 linkBugToTC(tcKey, bugKey);
                 moveToBugToFix(tcKey);
-                addTriggerLabel(tcKey, triggerLabel);
+                removeProcessingLabels(tcKey, [triggerLabel, smTriggerLabel]);
                 postComment(tcKey,
                     'h3. 🔗 Existing Bug Linked (Batch)\n\n' +
                     'Linked to existing bug: *' + bugKey + '*'
                 );
                 results.linked.push({ tcKey: tcKey, bugKey: bugKey });
+                markResolved(resolvedSet, tcKey);
             } catch (e) {
                 console.error('  ❌ Failed to link', tcKey, '→', bugKey, ':', e);
                 results.errors.push({ tcKey: tcKey, bugKey: bugKey, error: e.toString() });
             }
         });
 
-        // ── 3. Mark skipped TCs (keep in Failed, add trigger label) ──────────
+        // ── 3. Test-code issues → In Rework so they leave Failed and rework runs ─
         skipped.forEach(function(skipDef) {
             var tcKey = skipDef.tcKey;
             if (!tcKey) return;
@@ -261,15 +364,49 @@ function action(params) {
                 console.warn('  ⚠️ TC', tcKey, 'not in processed list — skipping (safety guard)');
                 return;
             }
-
             console.log('  Skipping', tcKey, '—', skipDef.reason || 'no reason given');
-            addTriggerLabel(tcKey, triggerLabel);
+            moveFailedTcToRework(tcKey);
+            try {
+                removeProcessingLabels(tcKey, [triggerLabel, smTriggerLabel]);
+                console.log('  🏷️ Removed trigger labels from', tcKey, '— eligible for rework');
+            } catch (e) {}
             postComment(tcKey,
-                'h3. ℹ️ No Bug Created (Batch)\n\n' +
-                (skipDef.reason || 'AI determined no bug creation is required.') +
-                '\n\n_TC remains in Failed status._'
+                'h3. ℹ️ No Bug Created (Batch) — Test Code Issue\n\n' +
+                '*Reason*: ' + (skipDef.reason || 'AI determined this is a test code issue, not an application bug.') +
+                '\n\n_TC moved to *In Rework* so the test automation can be fixed instead of staying in *Failed*._'
             );
             results.skipped.push({ tcKey: tcKey, reason: skipDef.reason });
+            markResolved(resolvedSet, tcKey);
+        });
+
+        // ── 4. Recovery guard: processed TCs must never keep a stale bulk lock ──
+        processed.forEach(function(tcKey) {
+            if (!tcKey || resolvedSet[tcKey]) return;
+
+            console.warn('  ⚠️ Processed TC has no successful bulk outcome:', tcKey);
+            var linkedBugKey = findLinkedNonDoneBug(tcKey);
+            if (linkedBugKey) {
+                moveToBugToFix(tcKey);
+                removeProcessingLabels(tcKey, [triggerLabel, smTriggerLabel]);
+                postComment(tcKey,
+                    'h3. 🔗 Existing Bug Found After Batch\n\n' +
+                    'Bulk bug creation did not produce a final decision for this TC, ' +
+                    'but a linked non-Done bug already exists: *' + linkedBugKey + '*.\n\n' +
+                    '_TC moved to *Bug To Fix* and stale bug-creation locks were removed._'
+                );
+                results.linked.push({ tcKey: tcKey, bugKey: linkedBugKey, source: 'post_batch_recovery' });
+                markResolved(resolvedSet, tcKey);
+                return;
+            }
+
+            removeProcessingLabels(tcKey, [triggerLabel, smTriggerLabel]);
+            postComment(tcKey,
+                'h3. ⚠️ Bulk Bug Creation Released\n\n' +
+                'Bulk bug creation processed this TC but did not create, link, or skip it. ' +
+                'No linked non-Done bug was found during the post-action live check.\n\n' +
+                '_Stale bug-creation locks were removed so the next bulk cycle can retry from Failed._'
+            );
+            results.released.push({ tcKey: tcKey, reason: 'no bulk outcome and no linked non-Done bug' });
         });
 
         // ── Summary ───────────────────────────────────────────────────────────
@@ -277,6 +414,7 @@ function action(params) {
         console.log('  Created:', results.created.length, 'bug links');
         console.log('  Linked:', results.linked.length, 'to existing bugs');
         console.log('  Skipped:', results.skipped.length);
+        console.log('  Released:', results.released.length, 'without outcome');
         console.log('  Errors:', results.errors.length);
 
         return { success: true, results: results };
@@ -285,4 +423,8 @@ function action(params) {
         console.error('postBulkBugsCreation failed:', e);
         throw e;
     }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { action };
 }

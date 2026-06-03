@@ -92,8 +92,17 @@ suite('submodule helper', function() {
                 if (command === 'git -C trackstate-setup rev-list --count origin/main..HEAD') {
                     return '2';
                 }
-                if (command === 'git -C trackstate-setup merge-base --is-ancestor HEAD origin/main') {
-                    throw new Error('local ahead of remote');
+                if (command === 'git -C trackstate-setup rev-parse HEAD') {
+                    return 'head-sha';
+                }
+                if (command === 'git -C trackstate-setup rev-parse origin/main') {
+                    return 'base-sha';
+                }
+                if (command === 'git -C trackstate-setup rev-list -1 head-sha --not base-sha') {
+                    return 'head-sha';
+                }
+                if (command === 'git -C trackstate-setup rev-list -1 base-sha --not head-sha') {
+                    return '';
                 }
                 if (command === 'git -C trackstate-setup rev-parse --short=12 HEAD') {
                     return '2b4b84712bfa';
@@ -127,8 +136,17 @@ suite('submodule helper', function() {
                 if (command === 'git -C trackstate-setup rev-list --count origin/main..HEAD') {
                     return '2';
                 }
-                if (command === 'git -C trackstate-setup merge-base --is-ancestor HEAD origin/main') {
-                    throw new Error('local ahead of remote');
+                if (command === 'git -C trackstate-setup rev-parse HEAD') {
+                    return 'head-sha';
+                }
+                if (command === 'git -C trackstate-setup rev-parse origin/main') {
+                    return 'base-sha';
+                }
+                if (command === 'git -C trackstate-setup rev-list -1 head-sha --not base-sha') {
+                    return 'head-sha';
+                }
+                if (command === 'git -C trackstate-setup rev-list -1 base-sha --not head-sha') {
+                    return '';
                 }
                 return '';
             }
@@ -196,9 +214,14 @@ suite('submodule helper', function() {
                 if (command === 'git -C trackstate-setup rev-list --count origin/main..HEAD') {
                     return '1';
                 }
-                if (command.indexOf('git -C trackstate-setup merge-base --is-ancestor') === 0) {
-                    throw new Error('diverged');
+                if (command === 'git -C trackstate-setup rev-parse HEAD') {
+                    return 'head-sha';
                 }
+                if (command === 'git -C trackstate-setup rev-parse origin/main') {
+                    return 'base-sha';
+                }
+                if (command === 'git -C trackstate-setup rev-list -1 head-sha --not base-sha') return 'head-sha';
+                if (command === 'git -C trackstate-setup rev-list -1 base-sha --not head-sha') return 'base-sha';
                 return '';
             }
         });
@@ -206,6 +229,8 @@ suite('submodule helper', function() {
         assert.ok(commands.indexOf('git -C trackstate-setup rebase origin/main') === -1, 'divergent stale gitlink should not be rebased');
         assert.ok(commands.indexOf('git -C trackstate-setup push origin HEAD:main') === -1, 'divergent clean gitlink should not be pushed');
         assert.ok(commands.indexOf('git -C trackstate-setup checkout -B main HEAD') === -1, 'divergent clean gitlink should not rewrite branch');
+        assert.ok(commands.indexOf('git -C trackstate-setup merge-base HEAD origin/main') === -1, 'expected non-ancestor checks must not call raw merge-base through error-logging command executor');
+        assert.ok(commands.indexOf('git -C trackstate-setup rev-list -1 head-sha --not base-sha') !== -1, 'expected non-ancestor checks should use exit-zero rev-list containment check');
     });
 
     test('restores stashed dirty changes when branch alignment fails', function() {

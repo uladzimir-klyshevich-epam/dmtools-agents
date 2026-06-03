@@ -170,6 +170,61 @@ var MINIMAL_AGENT_CONFIG = JSON.stringify({
     }
 });
 
+suite('sm.json rule ordering', function() {
+    test('failed test case bug creation runs before bug development consumes workflow cap', function() {
+        var config = JSON.parse(file_read({ path: 'sm.json' }));
+        var rules = config.params.jobParams.rules;
+        var indexByDescription = {};
+
+        rules.forEach(function(rule, index) {
+            indexByDescription[rule.description] = index;
+        });
+
+        var failedTcBulk = indexByDescription['Failed Test Cases → create or link bugs in batch'];
+        var bugDevelopment = indexByDescription['Backlog / To Do / Ready For Development / In Development Bugs → trigger bug_development'];
+
+        assert.ok(failedTcBulk >= 0, 'failed TC bulk creation rule exists');
+        assert.ok(bugDevelopment >= 0, 'bug development rule exists');
+        assert.ok(
+            failedTcBulk < bugDevelopment,
+            'failed TC bug creation must be prioritized before bug development uses maxTriggeredWorkflows'
+        );
+    });
+
+    test('bug development has a cooldown to avoid Copilot rate-limit retry storms', function() {
+        var config = JSON.parse(file_read({ path: 'sm.json' }));
+        var rules = config.params.jobParams.rules;
+        var bugDevelopment = null;
+
+        rules.forEach(function(rule) {
+            if (rule.description === 'Backlog / To Do / Ready For Development / In Development Bugs → trigger bug_development') {
+                bugDevelopment = rule;
+            }
+        });
+
+        assert.ok(bugDevelopment, 'bug development rule exists');
+        assert.contains(bugDevelopment.jql, 'updated <= -15m');
+        assert.equal(bugDevelopment.limit, 1, 'bug development should retry one ticket per SM cycle to avoid Copilot rate-limit bursts');
+        assert.equal(bugDevelopment.concurrencyKey, 'bug_development', 'bug development should use shared active-run detection across SM cycles');
+    });
+
+    test('stuck test case recovery has a cooldown to avoid racing active automation', function() {
+        var config = JSON.parse(file_read({ path: 'sm.json' }));
+        var rules = config.params.jobParams.rules;
+        var stuckRecovery = null;
+
+        rules.forEach(function(rule) {
+            if (rule.description === 'Stuck In Development Test Cases → recover (check PR, route to Rework/Review/Backlog)') {
+                stuckRecovery = rule;
+            }
+        });
+
+        assert.ok(stuckRecovery, 'stuck test case recovery rule exists');
+        assert.contains(stuckRecovery.jql, 'updated <= -15m');
+        assert.equal(stuckRecovery.localExecution, true, 'recovery should stay local execution');
+    });
+});
+
 // ── JQL interpolation ─────────────────────────────────────────────────────────
 
 suite('smAgent: JQL interpolation', function() {
@@ -371,6 +426,63 @@ suite('smAgent: ticket dispatch', function() {
         assert.equal(inputs.concurrency_key, 'P-1', 'first ticket dispatched, others deferred');
     });
 
+    test('global maxTriggeredWorkflows counts already active workflows before dispatch', function() {
+        var sm = makeSmAgent({
+            fileMap: { '../.dmtools/config.js': 'module.exports = { jira: { project: "P" }, repository: { owner: "o", repo: "r" } };' },
+            tickets: [
+                { key: 'P-1', fields: { labels: [] } }
+            ],
+            workflowRuns: {
+                in_progress: [
+                    { id: 1001, name: 'agents/bug_development.json : bug_development', status: 'in_progress' }
+                ]
+            }
+        });
+
+        var params = baseParams('o', 'r', [
+            makeRule("project = {jiraProject} AND status = 'Ready'", {
+                addLabel: 'sm_bulk_bugs_creation_triggered',
+                targetStatus: 'Bug Creation'
+            })
+        ]);
+        params.jobParams.maxTriggeredWorkflows = 1;
+
+        sm.action(params);
+
+        assert.equal(sm.capturedTriggers.length, 0, 'active workflow consumes the only global slot');
+        assert.equal(sm.capturedLabels.length, 0, 'trigger label must not be added when cap is full');
+        assert.equal(sm.capturedStatusMoves.length, 0, 'ticket should not move when no workflow slot is available');
+    });
+
+    test('global maxTriggeredWorkflows ignores stale queued workflows before dispatch', function() {
+        var sm = makeSmAgent({
+            fileMap: { '../.dmtools/config.js': 'module.exports = { jira: { project: "P" }, repository: { owner: "o", repo: "r" } };' },
+            tickets: [
+                { key: 'P-1', fields: { labels: [] } }
+            ],
+            workflowRuns: {
+                queued: [
+                    {
+                        id: 1002,
+                        name: 'AI Teammate',
+                        status: 'queued',
+                        created_at: '2020-01-01T00:00:00Z',
+                        updated_at: '2020-01-01T00:00:00Z'
+                    }
+                ]
+            }
+        });
+
+        var params = baseParams('o', 'r', [
+            makeRule("project = {jiraProject} AND status = 'Ready'")
+        ]);
+        params.jobParams.maxTriggeredWorkflows = 1;
+
+        sm.action(params);
+
+        assert.equal(sm.capturedTriggers.length, 1, 'stale queued workflow should not consume the global slot');
+    });
+
     test('maxWorkflowsPerRun alias also limits dispatches', function() {
         var sm = makeSmAgent({
             fileMap: { '../.dmtools/config.js': 'module.exports = { jira: { project: "P" }, repository: { owner: "o", repo: "r" } };' },
@@ -403,11 +515,36 @@ suite('smAgent: ticket dispatch', function() {
         assert.equal(sm.capturedTriggers.length, 1);
         var inputs = JSON.parse(sm.capturedTriggers[0].inputs);
         assert.equal(inputs.concurrency_key, 'P-42', 'concurrency key set to ticket key');
+        assert.equal(inputs.display_key, 'P-42', 'workflow display key set to ticket key');
+        assert.equal(inputs.input_jql, 'key = P-42', 'workflow input JQL set to ticket key');
         assert.equal(inputs.config_file, 'agents/story_development.json', 'config_file passed');
         assert.ok(inputs.encoded_config, 'encoded_config present');
 
         var decoded = JSON.parse(decodeURIComponent(inputs.encoded_config));
         assert.contains(decoded.params.inputJql, 'P-42', 'ticket key in inputJql');
+    });
+
+    test('uses rule concurrencyKey override while preserving ticket inputJql', function() {
+        var sm = makeSmAgent({
+            fileMap: { '../.dmtools/config.js': 'module.exports = { jira: { project: "P" }, repository: { owner: "o", repo: "r" } };' },
+            tickets: [{ key: 'P-42', fields: { labels: [] } }]
+        });
+
+        sm.action(baseParams('o', 'r', [
+            makeRule("project = {jiraProject}", {
+                configFile: 'agents/bulk_bugs_creation.json',
+                concurrencyKey: 'bulk_bugs_creation'
+            })
+        ]));
+
+        assert.equal(sm.capturedTriggers.length, 1);
+        var inputs = JSON.parse(sm.capturedTriggers[0].inputs);
+        assert.equal(inputs.concurrency_key, 'bulk_bugs_creation', 'rule concurrency key used');
+        assert.equal(inputs.display_key, 'P-42', 'workflow display key preserves ticket key');
+        assert.equal(inputs.input_jql, 'key = P-42', 'workflow input JQL remains ticket-specific');
+
+        var decoded = JSON.parse(decodeURIComponent(inputs.encoded_config));
+        assert.contains(decoded.params.inputJql, 'P-42', 'ticket key still used for agent input');
     });
 
     test('interpolates project placeholders from target agent params into encoded config', function() {
@@ -567,7 +704,7 @@ suite('smAgent: skipIfLabel', function() {
         assert.equal(sm.capturedLabels[0].label, 'sm_dev_triggered');
     });
 
-    test('does not add label when ticket already had skipIfLabel', function() {
+    test('does not recover trigger label when explicitly disabled', function() {
         var sm = makeSmAgent({
             fileMap: {},
             tickets: [
@@ -576,11 +713,69 @@ suite('smAgent: skipIfLabel', function() {
         });
 
         sm.action(baseParams('o', 'r', [
-            makeRule("project = X", { skipIfLabel: 'sm_triggered', addLabel: 'sm_triggered' })
+            makeRule("project = X", {
+                skipIfLabel: 'sm_triggered',
+                addLabel: 'sm_triggered',
+                recoverStaleTriggerLabel: false
+            })
         ]));
 
         assert.equal(sm.capturedTriggers.length, 0, 'no trigger for skipped ticket');
         assert.equal(sm.capturedLabels.length, 0, 'no label added for skipped ticket');
+    });
+
+    test('recovers stale trigger label by default when no active workflow exists', function() {
+        var sm = makeSmAgent({
+            fileMap: {},
+            tickets: [
+                { key: 'T-1', fields: { labels: ['sm_triggered'] } }
+            ],
+            workflowRuns: {
+                queued: [],
+                in_progress: []
+            }
+        });
+
+        sm.action(baseParams('o', 'r', [
+            makeRule("project = X", {
+                skipIfLabel: 'sm_triggered',
+                addLabel: 'sm_triggered'
+            })
+        ]));
+
+        assert.equal(sm.capturedTriggers.length, 1, 'stale label should not deadlock ticket');
+        var inputs = JSON.parse(sm.capturedTriggers[0].inputs);
+        assert.contains(inputs.encoded_config, 'T-1', 'T-1 was retriggered');
+    });
+
+    test('uses shared concurrencyKey when checking active workflow for stale label recovery', function() {
+        var sm = makeSmAgent({
+            fileMap: {},
+            tickets: [
+                { key: 'T-1', fields: { labels: ['sm_bulk_bugs_creation_triggered'] } }
+            ],
+            workflowRuns: {
+                queued: [
+                    {
+                        display_title: 'agents/bulk_bugs_creation.json : T-1 : bulk_bugs_creation',
+                        status: 'queued'
+                    }
+                ],
+                in_progress: []
+            }
+        });
+
+        sm.action(baseParams('o', 'r', [
+            makeRule("project = X", {
+                configFile: 'agents/bulk_bugs_creation.json',
+                concurrencyKey: 'bulk_bugs_creation',
+                skipIfLabel: 'sm_bulk_bugs_creation_triggered',
+                addLabel: 'sm_bulk_bugs_creation_triggered',
+                recoverStaleTriggerLabel: true
+            })
+        ]));
+
+        assert.equal(sm.capturedTriggers.length, 0, 'active shared-concurrency run should prevent relaunch');
     });
 
     test('skips ticket that has any skipIfLabels entry', function() {
@@ -673,6 +868,24 @@ suite('smAgent: rule enabled flag', function() {
         ]));
 
         assert.equal(sm.capturedTriggers.length, 2, 'only 2 tickets processed (limit: 2)');
+    });
+
+    test('limit applies after skipped tickets so stale labels do not starve later tickets', function() {
+        var sm = makeSmAgent({
+            fileMap: {},
+            tickets: [
+                { key: 'T-skipped', fields: { labels: ['sm_triggered'] } },
+                { key: 'T-open', fields: { labels: [] } }
+            ]
+        });
+
+        sm.action(baseParams('o', 'r', [
+            makeRule("project = X", { skipIfLabel: 'sm_triggered', limit: 1 })
+        ]));
+
+        assert.equal(sm.capturedTriggers.length, 1, 'one non-skipped ticket should be triggered');
+        var inputs = JSON.parse(sm.capturedTriggers[0].inputs);
+        assert.contains(inputs.encoded_config, 'T-open', 'limit should not be consumed by skipped ticket');
     });
 
 });

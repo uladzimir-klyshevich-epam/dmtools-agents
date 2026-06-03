@@ -24,12 +24,31 @@ const { STATUSES, LABELS, resolveStatuses } = require('./config.js');
 const developTicket = require('./developTicketAndCreatePR.js');
 const outputFiles = require('./common/outputFiles.js');
 
+function cleanCliOutput(output) {
+    return (output || '').split('\n').filter(function(l) {
+        return l.trim() &&
+               l.indexOf('Script started') === -1 &&
+               l.indexOf('Script done') === -1 &&
+               l.indexOf('COMMAND=') === -1 &&
+               l.indexOf('COMMAND_EXIT_CODE=') === -1;
+    }).join('').trim();
+}
+
 function readJson(path) {
     try {
         const raw = outputFiles.readOutputFile(path, {});
         return (raw && raw.trim()) ? JSON.parse(raw) : null;
     } catch (e) {
         return null;
+    }
+}
+
+function hasCodeGraphUsage() {
+    try {
+        const raw = file_read({ path: '.dmtools/codegraph-usage.log' });
+        return !!(raw && raw.trim());
+    } catch (e) {
+        return false;
     }
 }
 
@@ -97,6 +116,27 @@ function action(params) {
         if (blocked) {
             console.log('outputs/blocked.json found — bug cannot be fixed automatically');
 
+            if (!hasCodeGraphUsage()) {
+                console.warn('outputs/blocked.json rejected — no CodeGraph usage was recorded');
+                try {
+                    jira_post_comment({
+                        key: ticketKey,
+                        comment: 'h3. ⚠️ Blocked Claim Needs CodeGraph Verification\n\n' +
+                            'The agent wrote `outputs/blocked.json`, but no CodeGraph usage was recorded. ' +
+                            'Source-code bugs must use CodeGraph before declaring the work blocked.\n\n' +
+                            'Resetting to *Ready For Development* for an automatic retry.'
+                    });
+                } catch (e) {}
+                try {
+                    jira_move_to_status({ key: ticketKey, statusName: statuses.READY_FOR_DEVELOPMENT });
+                    console.log('✅ Moved', ticketKey, 'to Ready For Development for CodeGraph retry');
+                } catch (e) {
+                    console.warn('Failed to move ticket to Ready For Development:', e);
+                }
+                removeLabels(ticketKey, params);
+                return { success: true, path: 'blocked_without_codegraph', ticketKey };
+            }
+
             let comment = 'h3. 🚫 Bug Cannot Be Fixed Automatically\n\n';
             comment += '*Reason*: ' + (blocked.reason || '(see details below)') + '\n\n';
             if (blocked.tried && blocked.tried.length > 0) {
@@ -125,6 +165,27 @@ function action(params) {
         const alreadyFixed = readJson('outputs/already_fixed.json');
         if (alreadyFixed) {
             console.log('outputs/already_fixed.json found — bug already resolved in codebase');
+
+            if (!hasCodeGraphUsage()) {
+                console.warn('outputs/already_fixed.json rejected — no CodeGraph usage was recorded');
+                try {
+                    jira_post_comment({
+                        key: ticketKey,
+                        comment: 'h3. ⚠️ Already Fixed Claim Needs CodeGraph Verification\n\n' +
+                            'The agent wrote `outputs/already_fixed.json`, but no CodeGraph usage was recorded. ' +
+                            'Already-fixed conclusions for source-code bugs must use CodeGraph to locate the relevant implementation and impact path.\n\n' +
+                            'Resetting to *Ready For Development* for an automatic retry.'
+                    });
+                } catch (e) {}
+                try {
+                    jira_move_to_status({ key: ticketKey, statusName: statuses.READY_FOR_DEVELOPMENT });
+                    console.log('✅ Moved', ticketKey, 'to Ready For Development for CodeGraph retry');
+                } catch (e) {
+                    console.warn('Failed to move ticket to Ready For Development:', e);
+                }
+                removeLabels(ticketKey, params);
+                return { success: true, path: 'already_fixed_without_codegraph', ticketKey };
+            }
 
             let comment = 'h3. ✅ Bug Already Fixed\n\n';
             if (alreadyFixed.rca) {
@@ -164,7 +225,12 @@ function action(params) {
 
         let hasGitChanges = false;
         try {
-            cli_execute_command({ command: 'git add .' });
+            try {
+                cli_execute_command({ command: 'git rm -r --ignore-unmatch .dmtools/copilot-sessions' });
+            } catch (cleanupErr) {
+                console.warn('Could not remove tracked Copilot session cache before checking status:', cleanupErr);
+            }
+            cli_execute_command({ command: 'git add . -- ":!.dmtools/copilot-sessions" ":!.dmtools/copilot-sessions/**"' });
             const rawStatus = cli_execute_command({ command: 'git status --porcelain' }) || '';
             const statusLines = rawStatus.split('\n').filter(function(l) {
                 return l.trim() &&
@@ -191,16 +257,28 @@ function action(params) {
                 console.log('Partial git changes found — pushing to preserve analysis work...');
                 try {
                     const rawBranch = cli_execute_command({ command: 'git branch --show-current' }) || '';
-                    const partialBranch = rawBranch.split('\n').filter(function(l) {
-                        return l.trim() &&
-                               l.indexOf('Script started') === -1 &&
-                               l.indexOf('Script done') === -1;
-                    }).join('').trim();
+                    const currentBranch = cleanCliOutput(rawBranch);
+                    const expectedBranch = configLoader.resolveBranchName(
+                        config,
+                        actualParamsForCheck.ticket,
+                        'development'
+                    );
+                    const baseBranch = (config.git && config.git.baseBranch) || 'main';
+                    const partialBranch = expectedBranch || currentBranch;
                     if (partialBranch) {
+                        if (currentBranch !== partialBranch) {
+                            console.log('Switching partial work from ' + (currentBranch || '(unknown)') +
+                                ' to development branch: ' + partialBranch);
+                            cli_execute_command({ command: 'git checkout -B ' + partialBranch });
+                        }
                         cli_execute_command({ command: 'git config user.name "' + config.git.authorName + '"' });
                         cli_execute_command({ command: 'git config user.email "' + config.git.authorEmail + '"' });
                         cli_execute_command({ command: 'git commit -m "' + configLoader.formatTemplate(config.formats.commitMessage.wip, {ticketKey: ticketKeyForCheck}) + '"' });
-                        cli_execute_command({ command: 'git push -u origin ' + partialBranch });
+                        var pushCommand = 'git push -u origin ' + partialBranch;
+                        if (currentBranch === baseBranch || currentBranch === 'main' || currentBranch === 'master') {
+                            pushCommand += ' --force-with-lease';
+                        }
+                        cli_execute_command({ command: pushCommand });
                         console.log('✅ Pushed partial analysis to branch:', partialBranch);
                     }
                 } catch (pushErr) {

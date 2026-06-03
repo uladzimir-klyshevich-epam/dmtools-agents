@@ -1,4 +1,14 @@
-User request is in 'input' folder, read all files there and do what is requested.
+User request is in the `input` folder. Before reading any named input file, run:
+
+```bash
+find input -maxdepth 2 -type f -print
+```
+
+Read the exact paths returned by that command. Do not read `input/request.md`,
+`input/comments.md`, `input/linked_tests.md`, or `input/existing_questions.json`
+unless that exact path appears in the `find` output. If a listed file has a
+ticket-key subfolder path such as `input/TS-123/request.md`, read that exact
+path instead. If `instruction.md` is missing at the repo root, do not retry it.
 
 **IMPORTANT** Before anything else, read inputs in this order:
 1. `instruction.md` (repo root) — **read this first**: project stack, deployment constraints, approved frameworks, and infrastructure access. All implementation decisions must respect the constraints defined here.
@@ -9,6 +19,7 @@ User request is in 'input' folder, read all files there and do what is requested
    - Read the **test run comments** to understand prior fix attempts and why they didn't work.
    - If a previous comment says "Bug Already Fixed" but the test is still failing, the fix was **incomplete or the test has timing/async requirements** that the code doesn't yet satisfy.
    - Before writing `already_fixed.json`, verify the linked test actually passes with the current code.
+   - If the linked TC has failed again after one or more Done bugs, treat this as a repeated-fix loop. Summarize the prior Done bug(s) in `outputs/rca.md`, run the linked test or its closest available command first, and do not claim already fixed unless that exact TC passes now.
 5. `existing_questions.json` — if present, clarification answers from the PO — treat as binding requirements
 
 ## GitHub token and workflow self-service
@@ -32,6 +43,16 @@ Before reading any source code, do ALL of the following:
 4. **The real root cause may be in routing, configuration, infrastructure, or data** — not in the component named in the ticket title. Follow the symptom, not the title.
 
 **Only if you cannot reproduce the bug** (no browser, no live server, no runnable test) — then fall back to static code analysis. Document in `outputs/rca.md` that reproduction was not possible and why.
+
+### Step 0.5: Use CodeGraph before source-code navigation
+
+Before reading source code, test code, or repository files for static analysis, run a targeted CodeGraph command such as:
+
+```bash
+codegraph context "<ticket key> bug root cause relevant source and tests"
+```
+
+Use CodeGraph for code investigation before `grep`, `find`, `cat`, `sed`, or opening source files directly. If you already know the symbol name, use `codegraph query "<symbol>"` first.
 
 ## Your workflow (MUST follow in order)
 

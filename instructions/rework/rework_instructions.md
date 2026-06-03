@@ -19,9 +19,19 @@ Do NOT run `git commit` or `git merge --abort` — the commit is handled automat
 ## Approach
 
 1. **Read `pr_discussions.md` first** — list all review comments and threads before touching any code
-2. **Be surgical but thorough** — fix the exact issue the reviewer flagged, then **search the entire codebase for the same pattern** and fix all similar occurrences. For example, if the reviewer flags a hardcoded `accessibilityRole="button"` string literal, `grep -r 'accessibilityRole="' src/ --include="*.tsx"` and fix ALL matching files — not just the one the reviewer pointed out. This prevents the same issue from being raised in the next review cycle. Do not refactor unrelated code or add unrequested features.
+2. **Be surgical but thorough** — before opening or editing any source file, run `codegraph context "<ticket key> <review issue and affected area>"`, even if the review already names an exact file, line, failing assertion, or test. Then fix the exact issue the reviewer flagged and use CodeGraph to find the same structural pattern across the codebase. Use `codegraph query`, `codegraph callers`, or `codegraph impact` when you know a symbol. Use `grep` only after CodeGraph when you need a literal string search. This prevents the same issue from being raised in the next review cycle. Do not refactor unrelated code or add unrequested features.
 3. **Address BLOCKING issues first** (security, critical bugs), then IMPORTANT, then SUGGESTIONS
 4. **If a SUGGESTION is minor and time-consuming**, you may skip it but explicitly note it in `outputs/response.md`
+
+## Scope-Creep Review Loop Guard
+
+If a reviewer blocks the PR because `pr_diff.txt` contains an unrelated deleted file, generated/cache artifact, tooling file, or other out-of-scope path, this is an actionable blocking issue even if it appears as a general PR comment instead of an inline thread.
+
+Before writing a no-action response:
+- Re-read `pr_diff.txt` and confirm the blocked path is no longer present.
+- For deleted unrelated files, restore the file from the base branch or otherwise remove that deletion from the PR diff.
+- Do not write "No open review comments" or "No new actionable items" while the blocked path remains in `pr_diff.txt`.
+- If the same path appears in repeated review cycles, fix that path first to stop the loop.
 
 ## Rework Decision Flow
 

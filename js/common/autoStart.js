@@ -1,4 +1,5 @@
 var scmModule = require('./scm.js');
+var STALE_NON_RUNNING_WORKFLOW_MS = 6 * 60 * 60 * 1000;
 
 function deriveProjectKey(customParams) {
     if (!customParams) return '';
@@ -39,6 +40,7 @@ function parseWorkflowRuns(raw) {
 
 function hasActiveTargetRun(scm, configFile, ticketKey, workflowFile) {
     var expectedName = configFile + ' : ' + ticketKey;
+    var expectedNameSuffix = ' : ' + ticketKey;
     var statuses = ['queued', 'in_progress', 'waiting', 'pending'];
 
     for (var i = 0; i < statuses.length; i++) {
@@ -53,13 +55,126 @@ function hasActiveTargetRun(scm, configFile, ticketKey, workflowFile) {
         var runs = parseWorkflowRuns(runsRaw);
         for (var j = 0; j < runs.length; j++) {
             var run = runs[j] || {};
+            if (isStaleNonRunningWorkflowRun(run, statuses[i])) continue;
             var name = run.display_title || run.displayTitle || run.name || '';
-            if (name === expectedName) {
+            var matchesOldName = name === expectedName;
+            var matchesDisplayName = name.indexOf(configFile + ' : ') === 0 &&
+                name.substring(name.length - expectedNameSuffix.length) === expectedNameSuffix;
+            if (matchesOldName || matchesDisplayName) {
                 console.log('autoStart: skipped duplicate ' + expectedName + ' because run #' +
                     (run.run_number || run.runNumber || run.id || '?') + ' is ' + (run.status || statuses[i]));
                 return true;
             }
         }
+    }
+
+    return false;
+}
+
+function workflowRunTimestamp(run) {
+    var value = run && (run.updated_at || run.updatedAt || run.created_at || run.createdAt);
+    if (!value) return null;
+    var timestamp = Date.parse(value);
+    return isNaN(timestamp) ? null : timestamp;
+}
+
+function isStaleNonRunningWorkflowRun(run, status) {
+    if (status === 'in_progress') return false;
+    var timestamp = workflowRunTimestamp(run);
+    if (!timestamp) return false;
+    return (Date.now() - timestamp) > STALE_NON_RUNNING_WORKFLOW_MS;
+}
+
+function workflowRunAge(run) {
+    var timestamp = workflowRunTimestamp(run);
+    if (!timestamp) return '';
+
+    var ageMinutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+    if (ageMinutes < 60) return ageMinutes + 'm';
+    var ageHours = Math.floor(ageMinutes / 60);
+    var remainingMinutes = ageMinutes % 60;
+    return ageHours + 'h' + (remainingMinutes ? ' ' + remainingMinutes + 'm' : '');
+}
+
+function formatWorkflowRunSummary(run, fallbackStatus) {
+    run = run || {};
+    var title = run.display_title || run.displayTitle || run.name || 'workflow run';
+    var status = run.status || fallbackStatus || 'active';
+    var age = workflowRunAge(run);
+    var id = run.id || run.databaseId || run.run_number || run.runNumber || '?';
+    var url = run.html_url || run.htmlUrl || run.url || '';
+    return title + ' [' + status + ', age ' + (age || '?') + ', id ' + id + ']' + (url ? ' ' + url : '');
+}
+
+function normalizePositiveInt(value) {
+    if (typeof value !== 'number' || !isFinite(value)) return null;
+    var normalized = Math.floor(value);
+    return normalized > 0 ? normalized : null;
+}
+
+function collectActiveWorkflowRuns(scm, workflowFile) {
+    var statuses = ['queued', 'in_progress', 'waiting', 'pending'];
+    var seen = {};
+    var count = 0;
+    var summaries = [];
+
+    for (var i = 0; i < statuses.length; i++) {
+        var runsRaw = null;
+        try {
+            runsRaw = scm.listWorkflowRuns(statuses[i], workflowFile, 50);
+        } catch (e) {
+            console.warn('autoStart: could not count ' + statuses[i] + ' workflow runs:', e.message || e);
+            continue;
+        }
+
+        var runs = parseWorkflowRuns(runsRaw);
+        for (var j = 0; j < runs.length; j++) {
+            var run = runs[j] || {};
+            if (isStaleNonRunningWorkflowRun(run, statuses[i])) continue;
+            var id = run.id || run.databaseId || run.run_number || ((run.display_title || run.displayTitle || run.name || '') + ':' + j + ':' + statuses[i]);
+            if (!seen[id]) {
+                seen[id] = true;
+                count += 1;
+                summaries.push(formatWorkflowRunSummary(run, statuses[i]));
+            }
+        }
+    }
+
+    return { count: count, summaries: summaries };
+}
+
+function countActiveWorkflowRuns(scm, workflowFile) {
+    return collectActiveWorkflowRuns(scm, workflowFile).count;
+}
+
+function logBlockingWorkflowRuns(summaries) {
+    if (!summaries || !summaries.length) return;
+    console.log('autoStart: blocking active workflow run(s):');
+    summaries.slice(0, 5).forEach(function(summary) {
+        console.log('autoStart:  - ' + summary);
+    });
+    if (summaries.length > 5) {
+        console.log('autoStart:  - ... +' + (summaries.length - 5) + ' more');
+    }
+}
+
+function resolveActiveWorkflowCap(options) {
+    var explicitCap = normalizePositiveInt(options.maxActiveWorkflows);
+    if (explicitCap) return explicitCap;
+    return normalizePositiveInt(options.config && options.config.smMaxWorkflows);
+}
+
+function isGlobalWorkflowCapReached(scm, workflowFile, options) {
+    var cap = resolveActiveWorkflowCap(options || {});
+    if (!cap) return false;
+
+    var active = collectActiveWorkflowRuns(scm, workflowFile);
+    var activeCount = active.count;
+    if (activeCount >= cap) {
+        console.log('autoStart: skipped workflow trigger because ' + activeCount +
+            ' active workflow run(s) reached global cap ' + cap);
+        logBlockingWorkflowRuns(active.summaries);
+        return true;
     }
 
     return false;
@@ -93,6 +208,13 @@ function triggerConfiguredWorkflowForTicket(options) {
     var projectKey = deriveProjectKey(customParams);
     var encodedCfg = buildAutoStartEncodedConfig(ticketKey, customParams, stripKeys);
 
+    if (isGlobalWorkflowCapReached(scm, workflowFile, {
+            config: config,
+            maxActiveWorkflows: options.maxActiveWorkflows
+        })) {
+        return false;
+    }
+
     if (hasActiveTargetRun(scm, configFile, ticketKey, workflowFile)) {
         return false;
     }
@@ -103,6 +225,7 @@ function triggerConfiguredWorkflowForTicket(options) {
         workflowFile,
         JSON.stringify({
             concurrency_key: ticketKey,
+            display_key: ticketKey,
             config_file: configFile,
             encoded_config: encodedCfg,
             project_key: projectKey || ''
@@ -182,5 +305,9 @@ module.exports = {
     buildAutoStartEncodedConfig: buildAutoStartEncodedConfig,
     triggerConfiguredWorkflowForTicket: triggerConfiguredWorkflowForTicket,
     hasActiveTargetRun: hasActiveTargetRun,
+    countActiveWorkflowRuns: countActiveWorkflowRuns,
+    collectActiveWorkflowRuns: collectActiveWorkflowRuns,
+    isGlobalWorkflowCapReached: isGlobalWorkflowCapReached,
+    isStaleNonRunningWorkflowRun: isStaleNonRunningWorkflowRun,
     triggerSmIfIdle: triggerSmIfIdle
 };

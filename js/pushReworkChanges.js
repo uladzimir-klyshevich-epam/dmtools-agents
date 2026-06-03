@@ -177,7 +177,13 @@ function commitAndPush(ticketKey, config, customParams) {
         ticketKey: ticketKey
     });
 
-    cmd('git add .');
+    try {
+        cmd('git rm -r --ignore-unmatch .dmtools/copilot-sessions');
+    } catch (cleanupErr) {
+        console.warn('Could not remove tracked Copilot session cache before staging:', cleanupErr);
+    }
+
+    cmd('git add . -- ":!.dmtools/copilot-sessions" ":!.dmtools/copilot-sessions/**"');
 
     const status = prHelper.readStagedDiffStat(cmd, workingDir);
 
@@ -208,8 +214,18 @@ function commitAndPush(ticketKey, config, customParams) {
     try {
         cmd('git push -u origin ' + branchName);
     } catch (pushError) {
-        console.log('Normal push failed, force pushing...');
-        cmd('git push -u origin ' + branchName + ' --force');
+        console.warn('Normal push failed; synchronizing with origin/' + branchName + ' before retry:', pushError.message || pushError);
+        try {
+            cmd('git -c fetch.recurseSubmodules=no fetch origin ' + branchName + ':refs/remotes/origin/' + branchName);
+            cmd('git merge --no-edit origin/' + branchName);
+            cmd('git push -u origin ' + branchName);
+        } catch (syncPushError) {
+            throw new Error(
+                'Could not push rework branch after synchronizing with origin/' + branchName +
+                '. Refusing to force-push over remote updates. Error: ' +
+                (syncPushError.message || syncPushError)
+            );
+        }
     }
 
     const remoteCheck = cleanCommandOutput(cmd('git ls-remote --heads origin ' + branchName) || '');
@@ -322,6 +338,41 @@ function postJiraComment(ticketKey, prUrl, branchName, prCommentPosted, codeChan
     }
 }
 
+function isInterruptedReworkResponse(response) {
+    var text = String(response || '');
+    return text.indexOf('CLI command executed but did not produce output file') !== -1 ||
+        text.indexOf('Command failed (exit code 124)') !== -1 ||
+        text.indexOf('Copilot command timed out') !== -1 ||
+        text.indexOf('outputs/response.md missing') !== -1 ||
+        text.indexOf('"path":"interrupted"') !== -1 ||
+        text.indexOf('"path": "interrupted"') !== -1;
+}
+
+function handleInterruptedRework(ticketKey, branchName, customParams, statuses) {
+    console.warn('Rework CLI was interrupted before writing required outputs; leaving PR conversations open and resetting ticket for retry.');
+    try {
+        jira_post_comment({
+            key: ticketKey,
+            comment: 'h3. ⏸️ Rework Interrupted\n\nThe AI agent pushed any staged partial changes, but it was interrupted before writing {code}outputs/response.md{code} and {code}outputs/review_replies.json{code}. PR conversations were left open. The ticket was moved back to *' + statuses.IN_REWORK + '* for retry.\n\n*Branch*: {code}' + branchName + '{code}'
+        });
+    } catch (e) {
+        console.warn('Failed to post interrupted rework Jira comment:', e.message || e);
+    }
+    try {
+        jira_move_to_status({ key: ticketKey, statusName: statuses.IN_REWORK });
+        console.log('✅ Moved', ticketKey, 'back to', statuses.IN_REWORK, 'for retry');
+    } catch (e) {
+        console.warn('Failed to move ticket back to ' + statuses.IN_REWORK + ':', e.message || e);
+    }
+    removeConfiguredLabels(ticketKey, customParams || {});
+    return {
+        success: true,
+        path: 'rework-interrupted',
+        ticketKey: ticketKey,
+        branchName: branchName
+    };
+}
+
 function action(params) {
     try {
         const actualParams = params.ticket ? params : (params.jobParams || params);
@@ -401,6 +452,20 @@ function action(params) {
                 });
             } catch (e) {}
             return { success: false, error: gateError };
+        }
+
+        if (isInterruptedReworkResponse(fixSummary)) {
+            var interruptedResume = feedbackLoop.resumeAgent({
+                ticketKey: ticketKey,
+                customParams: _customParams,
+                section: 'postAction',
+                stage: 'rework_missing_outputs',
+                error: fixSummary
+            });
+            if (interruptedResume.attempted) {
+                return action(params);
+            }
+            return handleInterruptedRework(ticketKey, branchName, _customParams, statuses);
         }
 
         // Find PR to post comment — prefer targetRepository from config over git remote
@@ -544,5 +609,5 @@ function action(params) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { action, resolveCustomParams };
+    module.exports = { action, resolveCustomParams, isInterruptedReworkResponse };
 }

@@ -14,30 +14,6 @@ var outputFiles = require('./common/outputFiles.js');
 const { GIT_CONFIG, STATUSES, LABELS, resolveStatuses } = require('./config.js');
 var cacheToReleases = require('./cacheToReleases.js');
 
-function deriveProjectKey(customParams) {
-    if (!customParams) return '';
-    if (customParams.projectKey) return customParams.projectKey;
-    var cp = customParams.configPath || '';
-    if (!cp) return '';
-    var base = cp.substring(cp.lastIndexOf('/') + 1).replace(/\.js$/, '');
-    return (base && base !== 'config') ? base : '';
-}
-
-function buildAutoStartEncodedConfig(ticketKey, customParams) {
-    var p = { inputJql: 'key = ' + ticketKey };
-    if (customParams) {
-        // Pass the full customParams to the next agent so it has all config
-        // (autoStartReworkConfigFile, customStatuses, targetRepository, etc.)
-        // Strip fields that are only relevant to the current agent's execution.
-        var nextCustomParams = Object.assign({}, customParams);
-        delete nextCustomParams.removeLabel;   // SM idempotency label — per-agent, not inherited
-        delete nextCustomParams.autoStartReview;             // dev → review trigger, not needed downstream
-        delete nextCustomParams.autoStartReviewConfigFile;   // same
-        p.customParams = nextCustomParams;
-    }
-    return encodeURIComponent(JSON.stringify({ params: p }));
-}
-
 function hasPrApprovedLabel(ticket) {
     var labels = (ticket && ticket.fields && ticket.fields.labels) ? ticket.fields.labels : [];
     return labels.indexOf(LABELS.PR_APPROVED) !== -1;
@@ -227,10 +203,18 @@ function performGitOperations(branchName, commitMessage, baseBranch, config, cus
             ticketKey: ticketKey
         });
 
+        try {
+            runCmd({
+                command: 'git rm -r --ignore-unmatch .dmtools/copilot-sessions'
+            });
+        } catch (cleanupErr) {
+            console.warn('Could not remove tracked Copilot session cache before staging:', cleanupErr);
+        }
+
         // Stage all changes
         console.log('Staging changes...');
         runCmd({
-            command: 'git add .'
+            command: 'git add . -- ":!.dmtools/copilot-sessions" ":!.dmtools/copilot-sessions/**"'
         });
 
         // Check if there are changes to commit

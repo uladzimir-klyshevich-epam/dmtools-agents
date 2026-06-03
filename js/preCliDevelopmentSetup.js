@@ -43,6 +43,89 @@ function cleanCommandOutput(output) {
     return lines.join('\n').trim();
 }
 
+function writeBranchConflictGuidance(ticketKey, branchName, baseBranch, details) {
+    try {
+        file_write({
+            path: 'input/' + ticketKey + '/merge_conflicts.md',
+            content: '# Branch Conflict Guidance\n\n' +
+                'Branch `' + branchName + '` has work that is not already merged into `origin/' + baseBranch + '`, ' +
+                'and `origin/' + baseBranch + '` is not an ancestor of this branch.\n\n' +
+                'Do not discard the branch work automatically. If a merge conflict appears while syncing with `origin/' + baseBranch + '`, ' +
+                'resolve it deliberately. In most cases, prefer `origin/' + baseBranch + '` for repository setup, generated workflow/config files, ' +
+                'and shared infrastructure, then re-apply only the ticket-specific implementation that is still relevant.\n\n' +
+                'Details:\n\n```\n' + (details || '(not available)') + '\n```\n'
+        });
+    } catch (e) {
+        console.warn('Could not write branch conflict guidance:', e);
+    }
+}
+
+function branchHasUniquePatches(baseBranch) {
+    try {
+        var cherry = cleanCommandOutput(runCmd({ command: 'git cherry origin/' + baseBranch + ' HEAD' }) || '');
+        if (!cherry.trim()) return false;
+        var lines = cherry.split('\n');
+        for (var i = 0; i < lines.length; i++) {
+            if (lines[i].trim().indexOf('+') === 0) return true;
+        }
+        return false;
+    } catch (e) {
+        console.warn('Could not inspect unique branch patches:', e);
+        return true;
+    }
+}
+
+function isAncestorRef(ancestor, descendant) {
+    try {
+        runCmd({ command: 'git merge-base --is-ancestor ' + ancestor + ' ' + descendant });
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function findMergeBase(left, right) {
+    try {
+        return cleanCommandOutput(runCmd({ command: 'bash agents/scripts/git-merge-base-or-empty.sh ' + left + ' ' + right }) || '');
+    } catch (e) {
+        return '';
+    }
+}
+
+function alignBranchWithBase(ticketKey, branchName, baseBranch) {
+    if (isAncestorRef('HEAD', 'origin/' + baseBranch)) {
+        console.log('Branch changes are already included in origin/' + baseBranch + ', resetting local branch:', branchName);
+        runCmd({ command: 'git reset --hard origin/' + baseBranch });
+        return;
+    }
+
+    if (!branchHasUniquePatches(baseBranch)) {
+        console.log('Branch has no unique patches versus origin/' + baseBranch + ', resetting local branch:', branchName);
+        runCmd({ command: 'git reset --hard origin/' + baseBranch });
+        return;
+    }
+
+    if (isAncestorRef('origin/' + baseBranch, 'HEAD')) {
+        console.log('Branch already contains origin/' + baseBranch + ':', branchName);
+        return;
+    }
+    console.warn('Branch does not contain origin/' + baseBranch + ':', branchName);
+
+    var details = '';
+    try {
+        var mergeBase = findMergeBase('HEAD', 'origin/' + baseBranch);
+        if (mergeBase) {
+            details = cleanCommandOutput(runCmd({ command: 'git merge-tree ' + mergeBase + ' HEAD origin/' + baseBranch }) || '');
+        } else {
+            details = 'No merge base found between HEAD and origin/' + baseBranch + '. The local checkout is likely shallow or the branch history is unrelated to the current base.';
+        }
+    } catch (mergeTreeError) {
+        details = mergeTreeError && mergeTreeError.toString ? mergeTreeError.toString() : String(mergeTreeError);
+    }
+    writeBranchConflictGuidance(ticketKey, branchName, baseBranch, details.substring(0, 6000));
+    console.warn('Keeping divergent branch ' + branchName + '; conflict guidance written for the agent.');
+}
+
 function checkoutBranch(ticketKey, config, ticket) {
     ticket = ticket || { key: ticketKey, fields: {} };
     _workingDir = config.workingDir || null;
@@ -72,20 +155,9 @@ function checkoutBranch(ticketKey, config, ticket) {
     }
 
     if (localBranches.trim()) {
-        console.log('Branch exists locally, rebasing from main:', branchName);
+        console.log('Branch exists locally, aligning with base:', branchName);
         runCmd({ command: 'git checkout ' + branchName });
-        try {
-            var rebaseOutput = cleanCommandOutput(
-                runCmd({ command: 'git rebase origin/' + rebaseBase }) || ''
-            );
-            if (rebaseOutput.indexOf('CONFLICT') !== -1) {
-                throw new Error('Rebase conflict detected: ' + rebaseOutput.substring(0, 200));
-            }
-        } catch (rebaseErr) {
-            console.warn('Rebase failed, resetting to main:', rebaseErr);
-            try { runCmd({ command: 'git rebase --abort' }); } catch (_) {}
-            runCmd({ command: 'git reset --hard origin/' + rebaseBase });
-        }
+        alignBranchWithBase(ticketKey, branchName, rebaseBase);
     } else {
         var remoteBranches = '';
         try {
@@ -96,29 +168,18 @@ function checkoutBranch(ticketKey, config, ticket) {
         }
 
         if (remoteBranches.trim()) {
-            console.log('Branch exists on remote, fetching and checking out:', branchName);
+            console.log('Branch exists on remote, fetching and aligning with base:', branchName);
             // Explicitly fetch the branch so origin/<branch> tracking ref is available locally.
             // git fetch origin --prune may not populate it if the repo is sparse/shallow.
             try {
                 runCmd({ command: prHelper.buildOriginFetchCommand(branchName + ':' + branchName) });
                 runCmd({ command: 'git checkout ' + branchName });
             } catch (fetchCheckoutErr) {
-                console.warn('fetch+checkout failed, falling back to -b from origin:', fetchCheckoutErr);
+                console.warn('fetch+checkout failed, resetting local branch from origin:', fetchCheckoutErr);
                 runCmd({ command: prHelper.buildOriginFetchCommand(branchName) });
-                runCmd({ command: 'git checkout -b ' + branchName + ' origin/' + branchName });
+                runCmd({ command: 'git checkout -B ' + branchName + ' origin/' + branchName });
             }
-            try {
-                var rebaseOutput2 = cleanCommandOutput(
-                    runCmd({ command: 'git rebase origin/' + rebaseBase }) || ''
-                );
-                if (rebaseOutput2.indexOf('CONFLICT') !== -1) {
-                    throw new Error('Rebase conflict detected: ' + rebaseOutput2.substring(0, 200));
-                }
-            } catch (rebaseErr) {
-                console.warn('Rebase failed, resetting to main:', rebaseErr);
-                try { runCmd({ command: 'git rebase --abort' }); } catch (_) {}
-                runCmd({ command: 'git reset --hard origin/' + rebaseBase });
-            }
+            alignBranchWithBase(ticketKey, branchName, rebaseBase);
         } else {
             // New branch: in two-branch mode, ensure feature branch exists first
             var branchBase = config.git.baseBranch;
@@ -227,4 +288,8 @@ function action(params) {
         console.error('Error in preCliDevelopmentSetup:', error);
         throw error;
     }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { action };
 }

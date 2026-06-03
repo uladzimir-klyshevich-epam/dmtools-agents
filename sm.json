@@ -62,12 +62,37 @@
           "addLabel": "sm_story_development_triggered"
         },
         {
+          "description": "Failed Test Cases with linked Bugs → recover Bug To Fix",
+          "jql": "project = {jiraProject} AND issuetype in ('Test Case') AND status in ('Failed') ORDER BY updated ASC",
+          "configFile": "agents/recover_failed_tc_bug_status.json",
+          "localExecution": true
+        },
+        {
+          "description": "Failed Test Cases → create or link bugs in batch",
+          "jql": "project = {jiraProject} AND issuetype in ('Test Case') AND status in ('Failed') AND (labels is EMPTY OR labels NOT IN ('sm_bug_creation_triggered')) ORDER BY created ASC",
+          "configFile": "agents/bulk_bugs_creation.json",
+          "concurrencyKey": "bulk_bugs_creation",
+          "skipIfLabel": "sm_bulk_bugs_creation_triggered",
+          "addLabel": "sm_bulk_bugs_creation_triggered",
+          "recoverStaleTriggerLabel": true,
+          "limit": 1,
+          "enabled": true
+        },
+        {
           "description": "Backlog / To Do / Ready For Development / In Development Bugs → trigger bug_development",
-          "jql": "project = {jiraProject} AND issuetype in ('Bug') AND status in ('Backlog', 'To Do', 'Ready For Development', 'In Development', 'In Progress')",
+          "jql": "project = {jiraProject} AND issuetype in ('Bug') AND status in ('Backlog', 'To Do', 'Ready For Development', 'In Development', 'In Progress') AND updated <= -15m ORDER BY updated ASC",
           "configFile": "agents/bug_development.json",
+          "concurrencyKey": "bug_development",
           "skipIfLabel": "sm_bug_development_triggered",
           "addLabel": "sm_bug_development_triggered",
+          "limit": 1,
           "enabled": true
+        },
+        {
+          "description": "Review/Rework/Blocked Stories & Bugs with already merged PR → recover Merged status",
+          "jql": "project = {jiraProject} AND issuetype in ('Story', 'Bug') AND status in ('In Review', 'In Rework', 'Blocked') ORDER BY updated ASC",
+          "configFile": "agents/recover_merged_pr.json",
+          "localExecution": true
         },
         {
           "description": "In Review Stories & Bugs → trigger pr_review",
@@ -145,7 +170,7 @@
         },
         {
           "description": "Stuck In Development Test Cases → recover (check PR, route to Rework/Review/Backlog)",
-          "jql": "project = {jiraProject} AND issuetype in ('Test Case') AND status in ('In Development')",
+          "jql": "project = {jiraProject} AND issuetype in ('Test Case') AND status in ('In Development') AND updated <= -15m",
           "configFile": "agents/recover_stuck_test_case.json",
           "localExecution": true
         },
@@ -164,14 +189,6 @@
           "addLabel": "sm_test_review_triggered"
         },
         {
-          "description": "Backlog / To Do / Ready For Development Test Cases → In Development + automate",
-          "jql": "project = {jiraProject} AND issuetype in ('Test Case') AND status in ('Backlog', 'To Do', 'Ready For Development')",
-          "targetStatus": "In Development",
-          "configFile": "agents/test_case_automation.json",
-          "skipIfLabel": "sm_test_automation_triggered",
-          "addLabel": "sm_test_automation_triggered"
-        },
-        {
           "description": "Failed Test Cases → create or link bug (single, disabled by default — use bulk_bugs_creation instead)",
           "jql": "project = {jiraProject} AND issuetype in ('Test Case') AND status in ('Failed')",
           "configFile": "agents/bug_creation.json",
@@ -181,13 +198,12 @@
           "enabled": false
         },
         {
-          "description": "Failed Test Cases → create or link bugs in batch",
-          "jql": "project = {jiraProject} AND issuetype in ('Test Case') AND status in ('Failed') AND (labels is EMPTY OR labels NOT IN ('sm_bug_creation_triggered')) ORDER BY created ASC",
-          "configFile": "agents/bulk_bugs_creation.json",
-          "skipIfLabel": "sm_bulk_bugs_creation_triggered",
-          "addLabel": "sm_bulk_bugs_creation_triggered",
-          "limit": 1,
-          "enabled": true
+          "description": "Backlog / To Do / Ready For Development Test Cases → In Development + automate",
+          "jql": "project = {jiraProject} AND issuetype in ('Test Case') AND status in ('Backlog', 'To Do', 'Ready For Development')",
+          "targetStatus": "In Development",
+          "configFile": "agents/test_case_automation.json",
+          "skipIfLabel": "sm_test_automation_triggered",
+          "addLabel": "sm_test_automation_triggered"
         },
         {
           "description": "Bug To Fix Test Cases → all linked Bugs Done → move to Backlog",

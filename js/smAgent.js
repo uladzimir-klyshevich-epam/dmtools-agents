@@ -13,8 +13,8 @@
  *   If config.smRules is provided, uses those instead of params.rules (full override).
  *   Repository owner/repo from config override params when present.
  *   JQL placeholders {jiraProject} and {parentTicket} are resolved from config.
- *   jobParams.maxTriggeredWorkflows (or maxWorkflowsPerRun) limits total workflow dispatches
- *   per SM run across all non-local rules.
+ *   jobParams.maxTriggeredWorkflows (or maxWorkflowsPerRun) limits total active plus newly
+ *   dispatched workflows across all non-local rules.
  *   Override priority: config.smMaxWorkflows (from .dmtools/config.js) > sm.json value.
  *
  * Rule fields:
@@ -26,6 +26,7 @@
  *   targetStatus   (optional) — Jira status to transition tickets to before triggering
  *   workflowFile   (optional) — GitHub Actions workflow file  (default: ai-teammate.yml)
  *   workflowRef    (optional) — git ref for dispatch           (default: main)
+ *   concurrencyKey (optional) — workflow concurrency key override (default: ticket key)
  *   projectKey     (optional) — value passed as the `project_key` workflow input so the runner
  *                               activates the correct project-specific dependency setup (e.g. "myproject",
  *                               "bice"). Auto-derived from configPath basename when not set
@@ -34,6 +35,10 @@
  *   skipIfLabels   (optional) — skip ticket if it already has any of these labels
  *   addLabel       (optional) — add this label after triggering (idempotency marker)
  *   addLabels      (optional) — add these labels after triggering
+ *   recoverStaleTriggerLabel (optional) — if true, remove skip labels when no matching
+ *                               active workflow exists and continue processing. Trigger
+ *                               labels that are also added by the same rule recover by
+ *                               default; set false to opt out.
  *   enabled        (optional) — set to false to disable the rule entirely (default: true)
  *   limit          (optional) — max number of tickets to process per run (default: 50)
  *   localExecution (optional) — if true, run postJSAction directly (no runner, no AI/CLI)
@@ -44,6 +49,7 @@ var scmModule = require('./common/scm.js');
 
 // Project config loaded once in action() — used as global default for rules without configPath
 var projectConfig = null;
+var STALE_NON_RUNNING_WORKFLOW_MS = 6 * 60 * 60 * 1000;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -193,10 +199,30 @@ function parseWorkflowRuns(raw) {
     return [];
 }
 
+function labelList(value) {
+    if (!value) return [];
+    return Array.isArray(value) ? value : [value];
+}
+
+function isRuleTriggerLabel(rule, label) {
+    var labels = labelList(rule.addLabel).concat(labelList(rule.addLabels));
+    for (var i = 0; i < labels.length; i++) {
+        if (labels[i] === label) return true;
+    }
+    return false;
+}
+
+function shouldRecoverStaleTriggerLabel(rule, label) {
+    if (rule.recoverStaleTriggerLabel === true) return true;
+    if (rule.recoverStaleTriggerLabel === false) return false;
+    return isRuleTriggerLabel(rule, label);
+}
+
 function hasActiveTargetWorkflowRun(scm, workflowFile, configFile, ticketKey) {
     if (!scm || typeof scm.listWorkflowRuns !== 'function') return false;
 
     var expectedRunName = configFile + ' : ' + ticketKey;
+    var expectedRunNameSuffix = ' : ' + ticketKey;
     var statuses = ['queued', 'in_progress', 'waiting', 'pending'];
 
     for (var i = 0; i < statuses.length; i++) {
@@ -210,8 +236,12 @@ function hasActiveTargetWorkflowRun(scm, workflowFile, configFile, ticketKey) {
 
         for (var j = 0; j < runs.length; j++) {
             var run = runs[j] || {};
+            if (isStaleNonRunningWorkflowRun(run, statuses[i])) continue;
             var runName = run.name || run.display_title || '';
-            if (runName === expectedRunName) {
+            var matchesOldName = runName === expectedRunName;
+            var matchesDisplayName = runName.indexOf(configFile + ' : ') === 0 &&
+                runName.substring(runName.length - expectedRunNameSuffix.length) === expectedRunNameSuffix;
+            if (matchesOldName || matchesDisplayName) {
                 console.log('  ⏭️  ' + ticketKey + ' skipped (active workflow already exists: ' + expectedRunName + ')');
                 return true;
             }
@@ -221,10 +251,124 @@ function hasActiveTargetWorkflowRun(scm, workflowFile, configFile, ticketKey) {
     return false;
 }
 
-function triggerWorkflow(repoInfo, ticketKey, rule, effectiveConfig) {
+function workflowRunTimestamp(run) {
+    var value = run && (run.updated_at || run.updatedAt || run.created_at || run.createdAt);
+    if (!value) return null;
+    var timestamp = Date.parse(value);
+    return isNaN(timestamp) ? null : timestamp;
+}
+
+function isStaleNonRunningWorkflowRun(run, status) {
+    if (status === 'in_progress') return false;
+    var timestamp = workflowRunTimestamp(run);
+    if (!timestamp) return false;
+    return (Date.now() - timestamp) > STALE_NON_RUNNING_WORKFLOW_MS;
+}
+
+function workflowRunAge(run) {
+    var timestamp = workflowRunTimestamp(run);
+    if (!timestamp) return '';
+
+    var ageMinutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+    if (ageMinutes < 60) return ageMinutes + 'm';
+    var ageHours = Math.floor(ageMinutes / 60);
+    var remainingMinutes = ageMinutes % 60;
+    return ageHours + 'h' + (remainingMinutes ? ' ' + remainingMinutes + 'm' : '');
+}
+
+function formatWorkflowRunSummary(run, fallbackStatus) {
+    run = run || {};
+    var title = run.display_title || run.displayTitle || run.name || 'workflow run';
+    var status = run.status || fallbackStatus || 'active';
+    var age = workflowRunAge(run);
+    var id = run.id || run.databaseId || run.run_number || run.runNumber || '?';
+    var url = run.html_url || run.htmlUrl || run.url || '';
+    return title + ' [' + status + ', age ' + (age || '?') + ', id ' + id + ']' + (url ? ' ' + url : '');
+}
+
+function collectActiveWorkflowRuns(scm, workflowFile) {
+    if (!scm || typeof scm.listWorkflowRuns !== 'function') return { count: 0, summaries: [] };
+
+    var statuses = ['queued', 'in_progress', 'waiting', 'pending'];
+    var seen = {};
+    var count = 0;
+    var summaries = [];
+
+    for (var i = 0; i < statuses.length; i++) {
+        var runs = [];
+        try {
+            runs = parseWorkflowRuns(scm.listWorkflowRuns(statuses[i], workflowFile, 50));
+        } catch (e) {
+            console.warn('  ⚠️  Could not count active workflow runs (' + statuses[i] + '): ' + (e.message || e));
+            continue;
+        }
+
+        for (var j = 0; j < runs.length; j++) {
+            var run = runs[j] || {};
+            if (isStaleNonRunningWorkflowRun(run, statuses[i])) continue;
+            var id = run.id || run.databaseId || run.run_number || ((run.name || run.display_title || '') + ':' + j + ':' + statuses[i]);
+            if (!seen[id]) {
+                seen[id] = true;
+                count += 1;
+                summaries.push(formatWorkflowRunSummary(run, statuses[i]));
+            }
+        }
+    }
+
+    return { count: count, summaries: summaries };
+}
+
+function countActiveWorkflowRuns(scm, workflowFile) {
+    return collectActiveWorkflowRuns(scm, workflowFile).count;
+}
+
+function logBlockingWorkflowRuns(workflowBudget, workflowFile) {
+    if (!workflowBudget || !workflowBudget.activeRunSummariesByWorkflow) return;
+    var summaries = workflowBudget.activeRunSummariesByWorkflow[workflowFile] || [];
+    if (!summaries.length) return;
+
+    console.log('  Blocking active workflow run(s):');
+    summaries.slice(0, 5).forEach(function(summary) {
+        console.log('   - ' + summary);
+    });
+    if (summaries.length > 5) {
+        console.log('   - ... +' + (summaries.length - 5) + ' more');
+    }
+}
+
+function ensureWorkflowBudgetActiveCount(workflowBudget, scm, workflowFile) {
+    if (!workflowBudget) return;
+    if (!workflowBudget.activeCountsByWorkflow) workflowBudget.activeCountsByWorkflow = {};
+    if (workflowBudget.activeCountsByWorkflow[workflowFile]) return;
+    if (!workflowBudget.activeRunSummariesByWorkflow) workflowBudget.activeRunSummariesByWorkflow = {};
+
+    var active = collectActiveWorkflowRuns(scm, workflowFile);
+    var activeCount = active.count;
+    workflowBudget.activeCount = (workflowBudget.activeCount || 0) + activeCount;
+    workflowBudget.remaining = Math.max(0, workflowBudget.remaining - activeCount);
+    workflowBudget.activeCountsByWorkflow[workflowFile] = true;
+    workflowBudget.activeRunSummariesByWorkflow[workflowFile] = active.summaries;
+
+    if (activeCount > 0) {
+        console.log('  Active workflow cap accounting: ' + activeCount + ' active, ' + workflowBudget.remaining + ' dispatch slot(s) left');
+        logBlockingWorkflowRuns(workflowBudget, workflowFile);
+    }
+}
+
+function isWorkflowBudgetExhausted(rule, effectiveConfig, workflowBudget) {
+    if (!workflowBudget) return false;
+
+    var workflowFile = rule.workflowFile || 'ai-teammate.yml';
+    var scm = scmModule.createScm(effectiveConfig);
+    ensureWorkflowBudgetActiveCount(workflowBudget, scm, workflowFile);
+    return workflowBudget.remaining <= 0;
+}
+
+function triggerWorkflow(repoInfo, ticketKey, rule, effectiveConfig, workflowBudget) {
     var workflowFile = rule.workflowFile || 'ai-teammate.yml';
     var workflowRef  = rule.workflowRef  || 'main';
     var resolvedCf   = resolveConfigFile(rule, effectiveConfig);
+    var concurrencyKey = rule.concurrencyKey || ticketKey;
 
     // Resolve project_key: explicit rule field takes priority, then auto-derive from configPath
     // e.g. ".dmtools/configs/myproject.js" → "myproject", ".dmtools/configs/bice.js" → "bice"
@@ -237,7 +381,13 @@ function triggerWorkflow(repoInfo, ticketKey, rule, effectiveConfig) {
 
     try {
         var scm = scmModule.createScm(effectiveConfig);
-        if (hasActiveTargetWorkflowRun(scm, workflowFile, resolvedCf, ticketKey)) {
+        ensureWorkflowBudgetActiveCount(workflowBudget, scm, workflowFile);
+        if (workflowBudget && workflowBudget.remaining <= 0) {
+            console.log('  ⏭️  ' + ticketKey + ' skipped (global workflow cap reached: ' + workflowBudget.initial + ')');
+            logBlockingWorkflowRuns(workflowBudget, workflowFile);
+            return false;
+        }
+        if (hasActiveTargetWorkflowRun(scm, workflowFile, resolvedCf, concurrencyKey)) {
             return false;
         }
         scm.triggerWorkflow(
@@ -245,7 +395,9 @@ function triggerWorkflow(repoInfo, ticketKey, rule, effectiveConfig) {
             repoInfo.repo,
             workflowFile,
             JSON.stringify({
-                concurrency_key: ticketKey,
+                concurrency_key: concurrencyKey,
+                display_key:     ticketKey,
+                input_jql:       'key = ' + ticketKey,
                 config_file:     resolvedCf,
                 encoded_config:  buildEncodedConfig(ticketKey, rule, effectiveConfig),
                 project_key:     projectKey
@@ -298,6 +450,16 @@ function addRuleLabels(ticketKey, rule) {
     normalizeLabels(rule.addLabel, rule.addLabels).forEach(function(label) {
         try { jira_add_label({ key: ticketKey, label: label }); } catch (e) {}
     });
+}
+
+function removeRuleLabel(ticketKey, label) {
+    if (!ticketKey || !label) return;
+    try {
+        jira_remove_label({ key: ticketKey, label: label });
+        console.log('  🏷️  Removed stale trigger label "' + label + '" from ' + ticketKey);
+    } catch (e) {
+        console.warn('  ⚠️  Could not remove stale trigger label "' + label + '" from ' + ticketKey + ': ' + (e.message || e));
+    }
 }
 
 function normalizePositiveInt(value) {
@@ -463,8 +625,10 @@ function processRule(rule, globalRepoInfo, ruleIndex, workflowBudget) {
 
     if (workflowBudget && workflowBudget.remaining <= 0) {
         var skippedLabel = rule.description || ('Rule #' + (ruleIndex + 1));
+        var workflowFile = rule.workflowFile || 'ai-teammate.yml';
         console.log('\n══ ' + skippedLabel + ' ══');
         console.log('  ⏭️  Global workflow cap reached (' + workflowBudget.initial + ') — skipping rule');
+        logBlockingWorkflowRuns(workflowBudget, workflowFile);
         return { processedKeys: [], skippedKeys: [] };
     }
 
@@ -511,8 +675,7 @@ function processRule(rule, globalRepoInfo, ruleIndex, workflowBudget) {
     }
 
     if (effectiveLimit !== null && tickets.length > effectiveLimit) {
-        console.log('  Limiting from ' + tickets.length + ' to ' + effectiveLimit + ' ticket(s)');
-        tickets = tickets.slice(0, effectiveLimit);
+        console.log('  Will trigger up to ' + effectiveLimit + ' ticket(s) after skipping active/stale labels');
     }
 
     if (tickets.length === 0) {
@@ -529,21 +692,41 @@ function processRule(rule, globalRepoInfo, ruleIndex, workflowBudget) {
         if (workflowBudget && workflowBudget.remaining <= 0) {
             break;
         }
+        if (effectiveLimit !== null && processedKeys.length >= effectiveLimit) {
+            break;
+        }
         var ticket = tickets[idx];
         var key = ticket.key;
 
         var skipLabel = firstMatchingLabel(ticket, normalizeLabels(rule.skipIfLabel, rule.skipIfLabels));
         if (skipLabel) {
-            console.log('  ⏭️  ' + key + ' skipped (label: ' + skipLabel + ')');
-            skippedKeys.push(key);
-            continue;
+            if (shouldRecoverStaleTriggerLabel(rule, skipLabel)) {
+                var workflowFile = rule.workflowFile || 'ai-teammate.yml';
+                var resolvedCf = resolveConfigFile(rule, effectiveConfig);
+                var scm = scmModule.createScm(effectiveConfig);
+                var activeKey = rule.concurrencyKey || key;
+                if (hasActiveTargetWorkflowRun(scm, workflowFile, resolvedCf, activeKey)) {
+                    skippedKeys.push(key);
+                    continue;
+                }
+                console.log('  ♻️  ' + key + ' has ' + skipLabel + ' but no active workflow — recovering stale trigger label');
+                removeRuleLabel(key, skipLabel);
+            } else {
+                console.log('  ⏭️  ' + key + ' skipped (label: ' + skipLabel + ')');
+                skippedKeys.push(key);
+                continue;
+            }
         }
 
         if (rule.targetStatus) {
+            if (isWorkflowBudgetExhausted(rule, effectiveConfig, workflowBudget)) {
+                console.log('  ⏭️  ' + key + ' skipped before transition (global workflow cap reached: ' + workflowBudget.initial + ')');
+                break;
+            }
             moveStatus(key, rule.targetStatus);
         }
 
-        var triggered = triggerWorkflow(effectiveRepoInfo, key, rule, effectiveConfig);
+        var triggered = triggerWorkflow(effectiveRepoInfo, key, rule, effectiveConfig, workflowBudget);
 
         if (triggered) addRuleLabels(key, rule);
 

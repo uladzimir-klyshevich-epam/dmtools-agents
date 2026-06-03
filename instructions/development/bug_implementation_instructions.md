@@ -13,6 +13,7 @@ The Teammate job has already prepared the full ticket context in the `input/<TIC
    - Human notes clarifying the bug, edge cases, or reproduction steps
 3. **`existing_questions.json`** — questions previously asked and their answers.
 4. **`linked_tests.md`** — linked test cases, if any.
+   - If a linked Test Case is currently `Failed` after older linked bugs reached `Done`, this ticket is a repeated-fix loop until proven otherwise. Read the latest failed run evidence, list the older Done bug(s) in `outputs/rca.md`, and verify the exact linked test before considering `already_fixed.json`.
 
 ## ⚠️ STEP 0.1 — Bug Returned to Development = Previous Fix Did NOT Work
 
@@ -24,6 +25,17 @@ If `comments.md` shows that **this ticket has been through development before** 
 4. **DO NOT assume "it was fixed in #NNN"** — the whole reason the ticket is back is that #NNN did not actually fix the problem (or fixed it incompletely). Never write `outputs/already_fixed.json` for a returned bug.
 5. Document in `outputs/rca.md` what the previous attempt missed and why your new approach is different.
 
+### STEP 0.1b — Linked Test Failed After Done Bug
+
+When `linked_tests.md` shows a Test Case that is still `Failed` while comments
+or linked issues mention older Done bugs for the same scenario, handle it like a
+returned bug even if the current Bug ticket is new:
+
+1. Identify the older Done bug(s) and any PRs they reference.
+2. Run the linked test or the closest available command before editing.
+3. Explain in `outputs/rca.md` why the Done bug did not cover the current failure.
+4. Do not write `already_fixed.json` unless the exact linked test passes now in the target environment.
+
 ## ⚠️ STEP 0.2 — Verify the Bug Actually Reproduces NOW
 
 Before claiming "already fixed" on any bug (returned or not):
@@ -33,6 +45,7 @@ Before claiming "already fixed" on any bug (returned or not):
 3. Write a unit test that exercises the exact failure scenario from the ticket. Run it.
    - If the test **FAILS** → the bug is real, proceed to fix.
    - If the test **PASSES** against current code → the bug may genuinely be fixed. Before writing `already_fixed.json`:
+     - Run a targeted CodeGraph command for the RCA code path, for example `codegraph context "<ticket key> already fixed validation <failing flow or symbol>"`. Do not write `already_fixed.json` until the conversation contains an actual executed `codegraph ...` command.
      - Re-read the latest comments — has QA confirmed the fix, or are they still reporting it broken?
      - Check the platform / build / environment the reporter mentioned — maybe it's only broken on one platform.
      - If the failure is only in the deployed artifact, trigger the appropriate deploy/sync workflow yourself with `SOURCE_GITHUB_TOKEN`, rerun the linked test on the refreshed deployment, and only then decide whether `already_fixed.json` is correct.
@@ -62,6 +75,7 @@ Otherwise, after RCA, check recent commits and the current codebase:
 - Run `git log --oneline -20` to see recent commits
 - Check if the code path identified in RCA already has the correct logic
 - Run the reproduction test from Step 0.2 — it must FAIL before you can claim the bug exists
+- Run a targeted CodeGraph command for the current code path and include the validated symbol/flow in `outputs/rca.md`; `already_fixed.json` is invalid without an actual executed `codegraph ...` command in the session.
 - If the reproduction test PASSES on current code AND no QA comment disputes this:
   - Write `outputs/already_fixed.json`:
     ```json

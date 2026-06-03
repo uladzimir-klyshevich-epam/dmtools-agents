@@ -15,6 +15,8 @@ var autoStart = require('./common/autoStart.js');
 var configLoader = require('./configLoader.js');
 var outputFiles = require('./common/outputFiles.js');
 
+var RESUME_MARKER = 'outputs/.pr-review-missing-output-resume-attempted';
+
 /**
  * Derive project key from customParams.configPath or customParams.projectKey.
  * e.g. ".dmtools/configs/myproject.js" → "myproject"
@@ -51,6 +53,17 @@ function buildAutoStartEncodedConfig(ticketKey, customParams) {
 function hasPrApprovedLabel(ticket) {
     var labels = (ticket && ticket.fields && ticket.fields.labels) ? ticket.fields.labels : [];
     return labels.indexOf(LABELS.PR_APPROVED) !== -1;
+}
+
+function markForSmStoryRework(ticketKey) {
+    try {
+        jira_add_label({ key: ticketKey, label: 'sm_story_rework_triggered' });
+        console.log('✅ Added SM rework label: sm_story_rework_triggered');
+        return true;
+    } catch (e) {
+        console.warn('⚠️ Failed to add SM rework label:', e.message || e);
+        return false;
+    }
 }
 
 function resolveCustomParams(params, config) {
@@ -120,6 +133,98 @@ function readMarkdownFile(filePath, ticketKey, workingDir) {
         console.warn('Could not read file ' + filePath + ':', error);
     }
     return '';
+}
+
+function writeFile(path, content) {
+    try {
+        file_write({ path: path, content: content });
+    } catch (e) {
+        file_write(path, content);
+    }
+}
+
+function attemptResumeIfReviewOutputsMissing(ticketKey) {
+    if (readReviewJson()) {
+        return false;
+    }
+
+    try {
+        var marker = file_read({ path: RESUME_MARKER });
+        if (marker && marker.trim()) {
+            console.warn('Review output resume already attempted once — skipping');
+            return false;
+        }
+    } catch (e) {}
+
+    console.log('Mandatory PR review outputs are missing. Attempting one resume run to write them.');
+    writeFile(RESUME_MARKER, new Date().toISOString() + '\n');
+
+    var recoveryPrompt =
+        'RESUME TASK: The previous PR review run ended without writing mandatory review output files.\n\n' +
+        'Do not rework product code. Read input/' + ticketKey + '/pr_info.md, pr_diff.txt, pr_discussions.md, ' +
+        'pr_discussions_raw.json when present, ci_failures.md when present, and the current PR context.\n\n' +
+        'Write these files before stopping:\n' +
+        '1. outputs/pr_review.json with fields recommendation, generalComment, resolvedThreadIds, inlineComments, issueCounts.\n' +
+        '2. outputs/pr_review_general.md with a short GitHub Markdown review summary.\n' +
+        '3. outputs/response.md with a short Jira review summary.\n\n' +
+        'If you found a BLOCK or REQUEST_CHANGES result, still write the files. Do not return only plain text.\n' +
+        'If the finding is not on a changed diff line, put it in outputs/pr_review_general.md and leave inlineComments empty.\n' +
+        'Validate outputs/pr_review.json as parseable JSON before stopping.\n' +
+        'Ticket: ' + ticketKey + '\n';
+
+    var promptFile = 'outputs/.pr-review-resume-prompt.md';
+    writeFile(promptFile, recoveryPrompt);
+
+    try {
+        var resumeResult = cli_execute_command({
+            command: 'bash agents/scripts/run-agent.sh --continue --resume ' + promptFile
+        });
+        console.log('Review output resume run output:', (resumeResult || '').substring(0, 500));
+        return true;
+    } catch (e) {
+        console.error('Review output resume run failed:', e);
+        return false;
+    }
+}
+
+function handleMissingReviewData(params, config, customParams) {
+    var ticketKey = params.ticket.key;
+    console.error('Failed to read pr_review.json after resume attempt');
+
+    try {
+        jira_post_comment({
+            key: ticketKey,
+            comment: 'h3. ⚠️ PR Review Output Missing\n\n' +
+                'The PR review agent completed without writing {code}outputs/pr_review.json{code}. ' +
+                'A resume was attempted once, but mandatory outputs are still missing. ' +
+                'The SM trigger label was cleared so the review can retry.'
+        });
+    } catch (e) {
+        console.warn('Could not post missing review output comment:', e);
+    }
+
+    var removeLabel = customParams && customParams.removeLabel;
+    if (removeLabel) {
+        try {
+            jira_remove_label({ key: ticketKey, label: removeLabel });
+            console.log('Removed SM label after missing review output:', removeLabel);
+        } catch (e) {
+            console.warn('Could not remove SM label after missing review output:', e);
+        }
+    }
+
+    try {
+        var scm = scmModule.createScm(config);
+        autoStart.triggerSmIfIdle({ config: config, customParams: customParams, scm: scm });
+    } catch (e) {
+        console.warn('Could not trigger SM after missing review output:', e);
+    }
+
+    return {
+        success: true,
+        action: 'missing_review_outputs',
+        error: 'No review data found in pr_review.json'
+    };
 }
 
 /**
@@ -196,6 +301,62 @@ function postGeneralComment(scm, pullRequestId, commentPath, ticketKey, workingD
     }
 }
 
+function isLinePresentInDiff(diffText, filePath, targetLine) {
+    if (!diffText || !filePath || !targetLine) return true;
+
+    var lineNumber = parseInt(targetLine, 10);
+    if (!lineNumber) return true;
+
+    var currentFile = null;
+    var newLine = null;
+    var lines = String(diffText).split(/\r?\n/);
+
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+
+        if (line.indexOf('diff --git ') === 0) {
+            currentFile = null;
+            newLine = null;
+            continue;
+        }
+
+        if (line.indexOf('+++ b/') === 0) {
+            currentFile = line.substring('+++ b/'.length);
+            if (currentFile === '/dev/null') currentFile = null;
+            continue;
+        }
+
+        if (currentFile !== filePath) continue;
+
+        var hunk = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+        if (hunk) {
+            newLine = parseInt(hunk[1], 10);
+            continue;
+        }
+
+        if (newLine === null) continue;
+
+        if (line.indexOf('+') === 0 || line.indexOf(' ') === 0) {
+            if (newLine === lineNumber) return true;
+            newLine++;
+        } else if (line.indexOf('-') === 0) {
+            continue;
+        } else if (line === '\\ No newline at end of file') {
+            continue;
+        } else {
+            newLine++;
+        }
+    }
+
+    return false;
+}
+
+function postFallbackInlineComment(scm, pullRequestId, filePath, line, commentText) {
+    var lineRef = filePath + (line ? ':' + line : '');
+    scm.addComment(pullRequestId, '📍 **`' + lineRef + '`**\n\n' + commentText);
+    console.log('✅ Posted fallback PR comment for ' + lineRef);
+}
+
 function postInlineComment(scm, pullRequestId, inlineComment, ticketKey, workingDir) {
     // Accept both spec formats:
     //   old spec: { file, comment: "path/to/file.md" }
@@ -215,6 +376,17 @@ function postInlineComment(scm, pullRequestId, inlineComment, ticketKey, working
 
         console.log('Posting inline comment on ' + filePath + ':' + inlineComment.line);
 
+        try {
+            var diffText = scm.getPrDiff(pullRequestId);
+            if (diffText !== null && !isLinePresentInDiff(diffText, filePath, inlineComment.line)) {
+                console.warn('Inline comment line is not present in PR diff; falling back to PR comment on ' + filePath + ':' + inlineComment.line);
+                postFallbackInlineComment(scm, pullRequestId, filePath, inlineComment.line, commentText);
+                return true;
+            }
+        } catch (diffError) {
+            console.warn('Could not fetch PR diff for inline comment validation:', diffError.message || diffError);
+        }
+
         scm.addInlineComment(
             pullRequestId, filePath, inlineComment.line, commentText,
             inlineComment.startLine || null, inlineComment.side || null
@@ -227,9 +399,7 @@ function postInlineComment(scm, pullRequestId, inlineComment, ticketKey, working
         // 422 = line not in diff hunk — fall back to a regular PR comment so nothing is lost
         console.warn('Inline comment failed (line not in diff?), falling back to PR comment on ' + filePath + ':' + inlineComment.line);
         try {
-            var lineRef = filePath + (inlineComment.line ? ':' + inlineComment.line : '');
-            scm.addComment(pullRequestId, '📍 **`' + lineRef + '`**\n\n' + commentText);
-            console.log('✅ Posted fallback PR comment for ' + lineRef);
+            postFallbackInlineComment(scm, pullRequestId, filePath, inlineComment.line, commentText);
             return true;
         } catch (fallbackError) {
             console.error('Failed to post fallback PR comment for ' + filePath + ':', fallbackError);
@@ -323,13 +493,14 @@ function action(params) {
         console.log('=== Processing PR review results for', ticketKey, '===');
 
         // Step 1: Read structured review data
-        const reviewData = readReviewJson(ticketKey, workingDir);
+        let reviewData = readReviewJson(ticketKey, workingDir);
         if (!reviewData) {
-            console.error('Failed to read pr_review.json');
-            return {
-                success: false,
-                error: 'No review data found in pr_review.json'
-            };
+            attemptResumeIfReviewOutputsMissing(ticketKey);
+            reviewData = readReviewJson(ticketKey, workingDir);
+        }
+        if (!reviewData) {
+            const customParams = resolveCustomParams(params, config);
+            return handleMissingReviewData(params, config, customParams);
         }
 
         console.log('Review recommendation:', reviewData.recommendation);
@@ -568,6 +739,7 @@ function action(params) {
                 }
             }
             if (!reworkStarted) {
+                markForSmStoryRework(ticketKey);
                 autoStart.triggerSmIfIdle({ config: config, customParams: customParams, scm: scm });
             }
         }
@@ -685,5 +857,5 @@ function action(params) {
 
 // Export for dmtools standalone execution
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { action, resolveCustomParams };
+    module.exports = { action, resolveCustomParams, isLinePresentInDiff };
 }

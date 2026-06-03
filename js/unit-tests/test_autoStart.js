@@ -28,7 +28,7 @@ suite('autoStart helper', function() {
                 if (status === 'in_progress') {
                     return JSON.stringify({
                         workflow_runs: [{
-                            name: 'agents/pr_test_automation_rework.json : TS-90',
+                            name: 'agents/pr_test_automation_rework.json : TS-90 : TS-90',
                             status: 'in_progress',
                             run_number: 584
                         }]
@@ -82,8 +82,73 @@ suite('autoStart helper', function() {
         assert.equal(triggeredPayload.repo, 'trackstate');
         assert.equal(triggeredPayload.workflowFile, 'ai-teammate.yml');
         assert.equal(triggeredPayload.payload.concurrency_key, 'TS-90');
+        assert.equal(triggeredPayload.payload.display_key, 'TS-90');
         assert.equal(triggeredPayload.payload.config_file, 'agents/pr_test_automation_rework.json');
         assert.equal(triggeredPayload.ref, 'main');
+    });
+
+    test('skips trigger when global active workflow cap is reached', function() {
+        var triggered = false;
+        var autoStart = loadAutoStartHelper({
+            github_list_workflow_runs: function(workspace, repository, status) {
+                if (status === 'in_progress') {
+                    return JSON.stringify({
+                        workflow_runs: [{
+                            id: 9001,
+                            name: 'agents/pr_rework.json : TS-91',
+                            status: 'in_progress'
+                        }]
+                    });
+                }
+                return JSON.stringify({ workflow_runs: [] });
+            },
+            github_trigger_workflow: function() {
+                triggered = true;
+            }
+        });
+
+        var result = autoStart.triggerConfiguredWorkflowForTicket({
+            ticketKey: 'TS-90',
+            config: { repository: { owner: 'IstiN', repo: 'trackstate' }, smMaxWorkflows: 1 },
+            customParams: {},
+            configFile: 'agents/pr_review.json'
+        });
+
+        assert.equal(result, false);
+        assert.equal(triggered, false, 'global cap should prevent follow-up auto-starts');
+    });
+
+    test('ignores stale queued runs when applying global active workflow cap', function() {
+        var triggered = false;
+        var autoStart = loadAutoStartHelper({
+            github_list_workflow_runs: function(workspace, repository, status) {
+                if (status === 'queued') {
+                    return JSON.stringify({
+                        workflow_runs: [{
+                            id: 9002,
+                            name: 'AI Teammate',
+                            status: 'queued',
+                            created_at: '2020-01-01T00:00:00Z',
+                            updated_at: '2020-01-01T00:00:00Z'
+                        }]
+                    });
+                }
+                return JSON.stringify({ workflow_runs: [] });
+            },
+            github_trigger_workflow: function() {
+                triggered = true;
+            }
+        });
+
+        var result = autoStart.triggerConfiguredWorkflowForTicket({
+            ticketKey: 'TS-90',
+            config: { repository: { owner: 'IstiN', repo: 'trackstate' }, smMaxWorkflows: 1 },
+            customParams: {},
+            configFile: 'agents/pr_review.json'
+        });
+
+        assert.equal(result, true);
+        assert.equal(triggered, true, 'stale queued workflow should not consume the global slot');
     });
 
 });
