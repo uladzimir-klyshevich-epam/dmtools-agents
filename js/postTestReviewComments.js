@@ -15,35 +15,18 @@ const { STATUSES, LABELS } = require('./config.js');
 const gh = require('./common/githubHelpers.js');
 const autoStart = require('./common/autoStart.js');
 const configLoader = require('./configLoader.js');
+const outputFiles = require('./common/outputFiles.js');
 
 function readFile(path) {
-    try {
-        const content = file_read({ path: path });
-        return (content && content.trim()) ? content : null;
-    } catch (e) {
-        console.warn('Could not read file ' + path + ':', e);
-        return null;
-    }
+    return outputFiles.readOutputFile(path, {});
 }
 
-function readOutputFile(relativePath, workingDir) {
-    var content = readFile(relativePath);
-    if (content) return content;
-
-    if (workingDir) {
-        content = readFile(workingDir + '/' + relativePath);
-        if (content) {
-            console.log('Read from fallback path:', workingDir + '/' + relativePath);
-            return content;
-        }
-    }
-
-    return null;
-}
-
-function readReviewJson(workingDir) {
+function readReviewJson(ticketKey, workingDir) {
     try {
-        const raw = readOutputFile('outputs/pr_review.json', workingDir);
+        const raw = outputFiles.readOutputFile('pr_review.json', {
+            ticketKey: ticketKey,
+            workingDir: workingDir
+        });
         if (!raw) return null;
         return JSON.parse(raw);
     } catch (e) {
@@ -220,7 +203,7 @@ function action(params) {
         console.log('=== Processing test automation review for', ticketKey, '===');
 
         // Step 1: Read review data
-        const reviewData = readReviewJson(workingDir);
+        const reviewData = readReviewJson(ticketKey, workingDir);
         if (!reviewData) {
             jira_post_comment({
                 key: ticketKey,

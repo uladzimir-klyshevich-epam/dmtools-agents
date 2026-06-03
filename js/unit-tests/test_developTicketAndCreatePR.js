@@ -16,6 +16,7 @@ function loadDevelopTicketAndCreatePR(mocks) {
                 resumeAgent: function() { return { attempted: false }; }
             },
             './common/autoStart.js': { triggerSmIfIdle: function() {} },
+            './common/outputFiles.js': { readOutputFile: function() { return null; } },
             './cacheToReleases.js': {},
             './configLoader.js': configLoaderModule,
             './config.js': configModule

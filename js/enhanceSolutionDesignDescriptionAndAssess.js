@@ -7,6 +7,7 @@
 // Import common helper functions
 const { assignForReview, extractTicketKey } = require('./common/jiraHelpers.js');
 const { STATUSES, LABELS, DIAGRAM_DEFAULTS, DIAGRAM_FORMAT, JIRA_FIELDS } = require('./config.js');
+const outputFiles = require('./common/outputFiles.js');
 
 /**
  * Read enhancement data from separate files
@@ -14,14 +15,15 @@ const { STATUSES, LABELS, DIAGRAM_DEFAULTS, DIAGRAM_FORMAT, JIRA_FIELDS } = requ
  *
  * @returns {Object} Parsed enhancement data or null if invalid
  */
-function parseSDCoreEnhancementResponse() {
+function parseSDCoreEnhancementResponse(ticketKey, workingDir) {
     let description = '';
     let diagram = '';
 
     // Read description from response.md
     try {
-        description = file_read({
-            path: 'outputs/response.md'
+        description = outputFiles.readOutputFile('response.md', {
+            ticketKey: ticketKey,
+            workingDir: workingDir
         });
         if (!description) {
             console.error('Description file not found or empty: outputs/response.md');
@@ -35,8 +37,9 @@ function parseSDCoreEnhancementResponse() {
 
     // Read diagram from diagram.md
     try {
-        diagram = file_read({
-            path: 'outputs/diagram.md'
+        diagram = outputFiles.readOutputFile('diagram.md', {
+            ticketKey: ticketKey,
+            workingDir: workingDir
         });
         if (!diagram) {
             console.warn('Diagram file not found or empty: outputs/diagram.md, using default');
@@ -125,7 +128,7 @@ function action(params) {
         console.log("Processing SD CORE enhancement for ticket:", ticketKey);
 
         // Read enhancement data from separate files
-        const enhancementData = parseSDCoreEnhancementResponse();
+        const enhancementData = parseSDCoreEnhancementResponse(ticketKey, null);
         if (!enhancementData) {
             const errorMsg = 'Failed to read enhancement data from output files';
             console.error(errorMsg);

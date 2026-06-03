@@ -36,7 +36,10 @@ function loadPreCli(workingDir) {
 
     var freshConfigLoader = loadModule(
         'js/configLoader.js',
-        makeRequire({ './config.js': configModule }),
+        makeRequire({
+            './config.js': configModule,
+            './common/scm.js': { createScm: function() { return {}; } }
+        }),
         { file_read: fileReadMock }
     );
 
@@ -132,7 +135,10 @@ function loadPreCliTestAutomation(workingDir) {
 
     var freshConfigLoader = loadModule(
         'js/configLoader.js',
-        makeRequire({ './config.js': configModule }),
+        makeRequire({
+            './config.js': configModule,
+            './common/scm.js': { createScm: function() { return {}; } }
+        }),
         { file_read: fileReadMock }
     );
 
@@ -234,7 +240,10 @@ function loadPostTestAutomation(workingDir, testFilesGlob) {
 
     var freshConfigLoader = loadModule(
         'js/configLoader.js',
-        makeRequire({ './config.js': configModule }),
+        makeRequire({
+            './config.js': configModule,
+            './common/scm.js': { createScm: function() { return {}; } }
+        }),
         { file_read: fileReadMock }
     );
 
@@ -253,6 +262,11 @@ function loadPostTestAutomation(workingDir, testFilesGlob) {
         null,
         allMocks
     );
+    var outputFiles = loadModule(
+        'js/common/outputFiles.js',
+        makeRequire({}),
+        allMocks
+    );
 
     var mod = loadModule(
         'js/postTestAutomationResults.js',
@@ -262,7 +276,8 @@ function loadPostTestAutomation(workingDir, testFilesGlob) {
             './common/pullRequest.js': prHelper,
             './common/autoStart.js': {
                 triggerConfiguredWorkflowForTicket: function() { return false; }
-            }
+            },
+            './common/outputFiles.js': outputFiles
         }),
         allMocks
     );

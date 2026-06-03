@@ -10,6 +10,7 @@ const submoduleHelper = require('./common/submodules.js');
 const feedbackLoop = require('./common/feedbackLoop.js');
 var configLoader = require('./configLoader.js');
 var autoStart = require('./common/autoStart.js');
+var outputFiles = require('./common/outputFiles.js');
 const { GIT_CONFIG, STATUSES, LABELS, resolveStatuses } = require('./config.js');
 var cacheToReleases = require('./cacheToReleases.js');
 
@@ -763,7 +764,10 @@ function action(params) {
                 //       → Reset to Ready For Development for automatic retry.
                 var agentResponse = null;
                 try {
-                    agentResponse = file_read({ path: 'outputs/response.md' });
+                    agentResponse = outputFiles.readOutputFile('response.md', {
+                        ticketKey: ticketKey,
+                        workingDir: _workingDir
+                    });
                 } catch (e) {
                     agentResponse = null;
                 }
@@ -839,7 +843,10 @@ function action(params) {
         // Verify outputs/response.md exists (must be created by cursor-agent or workflow)
         let responseContent;
         try {
-            responseContent = file_read({ path: 'outputs/response.md' });
+            responseContent = outputFiles.readOutputFile('response.md', {
+                ticketKey: ticketKey,
+                workingDir: _workingDir
+            });
         } catch (e) {
             responseContent = null;
         }

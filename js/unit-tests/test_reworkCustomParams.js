@@ -13,6 +13,7 @@ function loadPushReworkChanges() {
             './common/pullRequest.js': {},
             './common/feedbackLoop.js': {},
             './common/autoStart.js': { triggerConfiguredWorkflowForTicket: function() { return false; } },
+            './common/outputFiles.js': { readOutputFile: function() { return null; } },
             './cacheToReleases.js': {}
         }),
         {}

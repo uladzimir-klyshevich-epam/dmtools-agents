@@ -13,6 +13,7 @@ var submoduleHelper = require('./common/submodules.js');
 var prHelper = require('./common/pullRequest.js');
 var feedbackLoop = require('./common/feedbackLoop.js');
 var autoStart = require('./common/autoStart.js');
+var outputFiles = require('./common/outputFiles.js');
 const { GIT_CONFIG, STATUSES, LABELS, resolveStatuses } = require('./config.js');
 var cacheToReleases = require('./cacheToReleases.js');
 
@@ -227,10 +228,8 @@ function commitAndPush(ticketKey, config, customParams) {
  * JSON format: { "replies": [{ "inReplyToId": 123, "threadId": "PRRT_...", "reply": "..." }] }
  */
 function postThreadReplies(scm, pullRequestId) {
-    let repliesJson;
-    try {
-        repliesJson = file_read({ path: 'outputs/review_replies.json' });
-    } catch (e) {
+    let repliesJson = outputFiles.readOutputFile('review_replies.json', {});
+    if (!repliesJson) {
         console.warn('outputs/review_replies.json not found — skipping thread replies');
         return 0;
     }

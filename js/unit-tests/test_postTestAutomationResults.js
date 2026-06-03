@@ -10,7 +10,10 @@ function loadPostTestAutomation(mocks) {
 
     var freshConfigLoader = loadModule(
         'js/configLoader.js',
-        makeRequire({ './config.js': configModule, './common/scm.js': {} }),
+        makeRequire({
+            './config.js': configModule,
+            './common/scm.js': { createScm: function() { return {}; } }
+        }),
         { file_read: fileReadMock }
     );
 
@@ -25,6 +28,11 @@ function loadPostTestAutomation(mocks) {
     };
 
     var allMocks = Object.assign({}, defaults, mocks);
+    var outputFiles = loadModule(
+        'js/common/outputFiles.js',
+        makeRequire({}),
+        allMocks
+    );
     var prHelper = loadModule(
         'js/common/pullRequest.js',
         null,
@@ -41,7 +49,8 @@ function loadPostTestAutomation(mocks) {
                 triggerSmIfIdle: function() {
                     return { success: true };
                 }
-            }
+            },
+            './common/outputFiles.js': outputFiles
         }),
         allMocks
     );

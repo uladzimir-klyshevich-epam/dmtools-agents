@@ -23,6 +23,11 @@ function loadPostTestReviewComments(mocks) {
         cli_execute_command: function() { return ''; }
     };
     var allMocks = Object.assign({}, defaults, mocks || {});
+    var outputFiles = loadModule(
+        'js/common/outputFiles.js',
+        makeRequire({}),
+        allMocks
+    );
     var gh = loadModule(
         'js/common/githubHelpers.js',
         makeRequire({
@@ -44,7 +49,8 @@ function loadPostTestReviewComments(mocks) {
                 },
                 triggerSmIfIdle: function() {}
             },
-            './configLoader.js': configLoaderModule
+            './configLoader.js': configLoaderModule,
+            './common/outputFiles.js': outputFiles
         }),
         allMocks
     );

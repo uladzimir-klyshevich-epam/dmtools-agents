@@ -22,10 +22,11 @@
 var configLoader = require('./configLoader.js');
 const { STATUSES, LABELS, resolveStatuses } = require('./config.js');
 const developTicket = require('./developTicketAndCreatePR.js');
+const outputFiles = require('./common/outputFiles.js');
 
 function readJson(path) {
     try {
-        const raw = file_read({ path: path });
+        const raw = outputFiles.readOutputFile(path, {});
         return (raw && raw.trim()) ? JSON.parse(raw) : null;
     } catch (e) {
         return null;
@@ -177,7 +178,7 @@ function action(params) {
 
         let hasResponseMd = false;
         try {
-            const r = file_read({ path: 'outputs/response.md' });
+            const r = outputFiles.readOutputFile('response.md', { ticketKey: ticketKeyForCheck });
             hasResponseMd = !!(r && r.trim());
         } catch (e) {}
 

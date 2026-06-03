@@ -3,13 +3,17 @@
  */
 
 function loadPostPRReviewComments() {
+    var outputFiles = loadModule('js/common/outputFiles.js', makeRequire({}), {
+        file_read: function() { return null; }
+    });
     return loadModule(
         'js/postPRReviewComments.js',
         makeRequire({
             './config.js': configModule,
             './common/scm.js': { createScm: function() { return {}; } },
             './common/autoStart.js': { triggerConfiguredWorkflowForTicket: function() { return false; } },
-            './configLoader.js': configLoaderModule
+            './configLoader.js': configLoaderModule,
+            './common/outputFiles.js': outputFiles
         }),
         {
             file_read: function() { return null; }

@@ -4,13 +4,15 @@
 
 suite('writeSolutionAndDiagrams — module export', function() {
     test('exports action for GraalJS require wrappers', function() {
+        var outputFiles = loadModule('js/common/outputFiles.js', makeRequire({}), {});
         var module = loadModule(
             'js/writeSolutionAndDiagrams.js',
             makeRequire({
                 './config.js': configModule,
                 './configLoader.js': configLoaderModule,
                 './common/scm.js': { createScm: function() { return {}; } },
-                './common/autoStart.js': {}
+                './common/autoStart.js': {},
+                './common/outputFiles.js': outputFiles
             }),
             {}
         );
@@ -21,16 +23,25 @@ suite('writeSolutionAndDiagrams — module export', function() {
 
 suite('writeSolutionAndDiagrams — required outputs', function() {
     test('fails when diagram is required but missing', function() {
+        var outputFiles = loadModule('js/common/outputFiles.js', makeRequire({}), {
+            file_read: function(opts) {
+                var path = opts && (opts.path || opts);
+                if (path === 'outputs/response.md') return 'h2. Solution';
+                throw new Error('not found: ' + path);
+            }
+        });
         var module = loadModule(
             'js/writeSolutionAndDiagrams.js',
             makeRequire({
                 './config.js': configModule,
                 './configLoader.js': configLoaderModule,
                 './common/scm.js': { createScm: function() { return {}; } },
-                './common/autoStart.js': {}
+                './common/autoStart.js': {},
+                './common/outputFiles.js': outputFiles
             }),
             {
-                file_read: function(path) {
+                file_read: function(opts) {
+                    var path = opts && (opts.path || opts);
                     if (path === 'outputs/response.md') return 'h2. Solution';
                     throw new Error('not found: ' + path);
                 },

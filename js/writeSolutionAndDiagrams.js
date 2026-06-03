@@ -18,6 +18,7 @@ const { LABELS, DIAGRAM_FORMAT, JIRA_FIELDS, STATUSES } = require('./config.js')
 const configLoader = require('./configLoader.js');
 const scmModule = require('./common/scm.js');
 const autoStart = require('./common/autoStart.js');
+const outputFiles = require('./common/outputFiles.js');
 
 function action(params) {
     try {
@@ -38,21 +39,11 @@ function action(params) {
         console.log('Processing solution and diagrams for:', ticketKey);
         console.log('Solution field: ' + solutionField + ', Diagram field: ' + (diagramField || '(none — will prepend to solution)') + ', outputType: ' + outputType);
 
-        // Helper: read a file from root outputs/ path; fall back to ticket-specific subdirectory.
-        // CLI agents sometimes write to outputs/{ticketKey}/ instead of outputs/ root.
         function readOutput(filename) {
-            var rootPath    = 'outputs/' + filename;
-            var ticketPath  = 'outputs/' + ticketKey + '/' + filename;
-            var content = '';
-            try {
-                content = file_read(rootPath);
-            } catch (e) { /* not found at root — try ticket subdir */ }
-            if (!content) {
-                try {
-                    content = file_read(ticketPath);
-                    if (content) console.log('Read ' + filename + ' from ticket subdir: ' + ticketPath);
-                } catch (e) { /* not found in subdir either */ }
-            }
+            var content = outputFiles.readOutputFile(filename, {
+                ticketKey: ticketKey,
+                workingDir: projectConfig.workingDir || null
+            });
             return content ? content.trim() : '';
         }
 

@@ -31,6 +31,7 @@
 var configLoader = require('./configLoader.js');
 const { STATUSES, LABELS } = require('./config.js');
 var prHelper = require('./common/pullRequest.js');
+var outputFiles = require('./common/outputFiles.js');
 
 /** Marker file path to prevent infinite resume loops. */
 var RESUME_MARKER = 'outputs/.missing-output-resume-attempted';
@@ -73,13 +74,13 @@ function createScmCompat(config, owner, repo) {
  * Returns false if outputs already exist, or a resume was already attempted.
  */
 function attemptResumeIfOutputsMissing(ticketKey, workingDir) {
-    var resultJson = readOutputFile('outputs/test_automation_result.json', workingDir);
+    var resultJson = readOutputFile('test_automation_result.json', workingDir, ticketKey);
     if (resultJson) {
         return false; // outputs present — no resume needed
     }
 
     // Guard against infinite loops
-    var alreadyAttempted = readOutputFile(RESUME_MARKER, workingDir);
+    var alreadyAttempted = readOutputFile(RESUME_MARKER, workingDir, ticketKey);
     if (alreadyAttempted) {
         console.warn('⚠️  Resume already attempted once — skipping second resume to avoid infinite loop');
         return false;
@@ -154,31 +155,19 @@ function cleanCommandOutput(output) {
 }
 
 function readFile(path) {
-    try {
-        var content = file_read({ path: path });
-        return (content && content.trim()) ? content : null;
-    } catch (e) {
-        console.warn('Could not read file ' + path + ':', e);
-        return null;
-    }
+    return outputFiles.readOutputFile(path, {});
 }
 
-/** Read a file from outputs/, falling back to {workingDir}/outputs/ if not found at workspace root. */
-function readOutputFile(relativePath, workingDir) {
-    var content = readFile(relativePath);
-    if (content) return content;
-    if (workingDir) {
-        content = readFile(workingDir + '/' + relativePath);
-        if (content) {
-            console.log('Read from fallback path:', workingDir + '/' + relativePath);
-            return content;
-        }
-    }
-    return null;
+/** Read an output file from normalized paths (root outputs, ticket subdir, and workingDir variants). */
+function readOutputFile(relativePath, workingDir, ticketKey) {
+    return outputFiles.readOutputFile(relativePath, {
+        workingDir: workingDir,
+        ticketKey: ticketKey
+    });
 }
 
-function readResultJson(workingDir) {
-    var raw = readOutputFile('outputs/test_automation_result.json', workingDir);
+function readResultJson(workingDir, ticketKey) {
+    var raw = readOutputFile('test_automation_result.json', workingDir, ticketKey);
     if (!raw) {
         console.warn('test_automation_result.json not found in outputs/ or ' + (workingDir || 'no') + '/outputs/');
         return null;
@@ -316,7 +305,7 @@ function createAutomationPR(title, branchName, baseBranch, workingDir, scm) {
         workingDir: workingDir,
         scm: scm,
         runCommand: runInRepo,
-        readFile: function(path) { return readOutputFile(path, workingDir); },
+        readFile: function(path) { return readOutputFile(path, workingDir, null); },
         writeFile: file_write,
         bodyFileCandidates: ['outputs/pr_body.md', 'outputs/response.md'],
         defaultBody: 'Automated test flows'
@@ -403,11 +392,11 @@ function buildFeatureVerdictSummary(result) {
         '| ' + counts.passed + ' | ' + counts.failed + ' | ' + counts.skipped + ' |\n\n';
 }
 
-function updateFeaturePRBody(owner, repo, prNumber, workingDir, result) {
-    var summaryFile = readOutputFile('outputs/pr_feature_update.md', workingDir);
+function updateFeaturePRBody(owner, repo, prNumber, workingDir, result, ticketKey) {
+    var summaryFile = readOutputFile('pr_feature_update.md', workingDir, ticketKey);
     if (!summaryFile) {
         // Fallback: use pr_body.md (automation PR description) which has the same test results
-        summaryFile = readOutputFile('outputs/pr_body.md', workingDir);
+        summaryFile = readOutputFile('pr_body.md', workingDir, ticketKey);
         if (summaryFile) {
             console.log('No outputs/pr_feature_update.md — falling back to outputs/pr_body.md');
         }
@@ -441,10 +430,10 @@ function updateFeaturePRBody(owner, repo, prNumber, workingDir, result) {
     }
 }
 
-function updateFeaturePRBodyWithScm(scm, prNumber, workingDir, result) {
-    var summaryFile = readOutputFile('outputs/pr_feature_update.md', workingDir);
+function updateFeaturePRBodyWithScm(scm, prNumber, workingDir, result, ticketKey) {
+    var summaryFile = readOutputFile('pr_feature_update.md', workingDir, ticketKey);
     if (!summaryFile) {
-        summaryFile = readOutputFile('outputs/pr_body.md', workingDir);
+        summaryFile = readOutputFile('pr_body.md', workingDir, ticketKey);
         if (summaryFile) {
             console.log('No outputs/pr_feature_update.md — falling back to outputs/pr_body.md');
         }
@@ -585,7 +574,7 @@ function action(params) {
         }
 
         // Step 4: Read structured result (fallback: workspace root → automation repo outputs)
-        var result = readResultJson(workingDir);
+        var result = readResultJson(workingDir, ticketKey);
         if (!result) {
             console.warn('No test_automation_result.json found — posting error to Jira but keeping git work');
             try {
@@ -630,14 +619,14 @@ function action(params) {
                 // Inject automation PR URL into feature update markdown if present
                 if (automationPrUrl) {
                     try {
-                        var featureUpdateContent = readOutputFile('outputs/pr_feature_update.md', workingDir) || '';
+                        var featureUpdateContent = readOutputFile('pr_feature_update.md', workingDir, ticketKey) || '';
                         if (featureUpdateContent && featureUpdateContent.indexOf(automationPrUrl) === -1) {
                             file_write('outputs/pr_feature_update.md',
                                 featureUpdateContent + '\n> Automation PR: ' + automationPrUrl + '\n');
                         }
                     } catch (_) {}
                 }
-                updateFeaturePRBodyWithScm(featureScm, featurePR.number, workingDir, result);
+                updateFeaturePRBodyWithScm(featureScm, featurePR.number, workingDir, result, ticketKey);
             }
         }
 

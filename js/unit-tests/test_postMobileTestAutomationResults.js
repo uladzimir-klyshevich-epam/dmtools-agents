@@ -42,13 +42,19 @@ function loadPostCli(mocks) {
     };
 
     var allMocks = Object.assign({}, defaults, mocks);
+    var outputFiles = loadModule(
+        'js/common/outputFiles.js',
+        makeRequire({}),
+        allMocks
+    );
 
     return loadModule(
         'js/postMobileTestAutomationResults.js',
         makeRequire({
             './configLoader.js': freshConfigLoader,
             './config.js': configModule,
-            './common/pullRequest.js': prHelper
+            './common/pullRequest.js': prHelper,
+            './common/outputFiles.js': outputFiles
         }),
         allMocks
     );
