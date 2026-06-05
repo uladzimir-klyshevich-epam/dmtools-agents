@@ -179,11 +179,15 @@ function action(params) {
 
         // 5. Assign to initiator
         try {
-            jira_assign_ticket_to({
-                key: ticketKey,
-                accountId: initiatorId
-            });
-            console.log('Assigned ' + ticketKey + ' to initiator');
+            if (initiatorId) {
+                jira_assign_ticket_to({
+                    key: ticketKey,
+                    accountId: initiatorId
+                });
+                console.log('Assigned ' + ticketKey + ' to initiator');
+            } else {
+                console.log('No initiator id — skipping assign');
+            }
         } catch (assignError) {
             console.warn('Failed to assign ticket:', assignError);
         }

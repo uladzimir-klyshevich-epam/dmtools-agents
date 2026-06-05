@@ -1,18 +1,6 @@
 {
   "name": "Teammate",
   "params": {
-    "agentParams": {
-      "aiRole": "",
-      "instructions": [
-        "./agents/instructions/story_questions/general_guidelines.md",
-        "./agents/instructions/story_questions/file_handling.md",
-        "./agents/instructions/story_questions/output_rules.md"
-      ],
-      "knownInfo": "",
-      "formattingRules": "./agents/instructions/story_questions/formatting_rules.md",
-      "fewShots": "./agents/instructions/story_questions/few_shots.md"
-    },
-    "cliPrompt": "./agents/prompts/questions_prompt.md",
     "cliCommands": [
       "./agents/scripts/run-agent.sh"
     ],
@@ -31,7 +19,8 @@
       "./agents/instructions/story_questions/output_rules.md",
       "./agents/instructions/story_questions/formatting_rules.md",
       "./agents/instructions/story_questions/few_shots.md",
-      "./agents/prompts/bash_tools.md"
+      "./agents/prompts/bash_tools.md",
+      "./agents/prompts/questions_prompt.md"
     ]
   }
 }
