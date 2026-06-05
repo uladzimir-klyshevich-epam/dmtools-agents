@@ -93,7 +93,10 @@ function buildEncodedConfig(ticketKey, rule, effectiveConfig) {
         try {
             var agentJson = JSON.parse(file_read({ path: agentJsonPath }));
             var agentParamsRoot = agentJson.params || {};
+            // Keys that are already set in p (e.g. inputJql with the real ticket) must not be overwritten
+            var skipKeys = { inputJql: true };
             Object.keys(agentParamsRoot).forEach(function(paramKey) {
+                if (skipKeys[paramKey]) return;
                 var value = agentParamsRoot[paramKey];
                 if (typeof value === 'string') {
                     // Always copy string params; interpolate JQL placeholders when present
