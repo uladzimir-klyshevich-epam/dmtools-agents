@@ -147,6 +147,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 # ── Clone / update each repo ──────────────────────────────────────────────────
 # Use temp file to avoid subshell pipeline (so export_var side-effects persist)
 TMP_REPOS="$(mktemp)"
+TIMING_LOG=""
 jq -c --arg key "${PROJECT_KEY}" '.repositories[$key][]' "${CONFIG_FILE}" > "${TMP_REPOS}"
 
 while IFS= read -r entry; do
@@ -163,6 +164,7 @@ while IFS= read -r entry; do
   DEST="${DEST_ROOT}/${NAME}"
 
   echo ""
+  _T0=$(date +%s)
 
   if [ -n "${ADO_ORG}" ]; then
     # ── Azure DevOps entry ────────────────────────────────────────────────────
@@ -263,6 +265,11 @@ while IFS= read -r entry; do
   git -C "${DEST}" config user.name  "${GIT_USER_NAME}"
   git -C "${DEST}" config user.email "${GIT_USER_EMAIL}"
 
+  _T1=$(date +%s)
+  _DT=$(( _T1 - _T0 ))
+  printf "  ⏱  %ds\n" "${_DT}"
+  TIMING_LOG="${TIMING_LOG}${_DT}s  ${NAME}\n"
+
   # Export path env var if specified in config
   if [ -n "${ENV_VAR}" ]; then
     FULL_PATH="$(cd "${DEST}" && pwd)"
@@ -273,6 +280,10 @@ while IFS= read -r entry; do
 done < "${TMP_REPOS}"
 
 rm -f "${TMP_REPOS}"
+
+echo ""
+echo "⏱  Checkout timing (slowest first):"
+printf "%b" "${TIMING_LOG}" | sort -rn | head -20
 
 echo ""
 echo "✅ All dependencies ready for '${PROJECT_KEY}'"
