@@ -1,54 +1,37 @@
-# Intake Agent Formatting Rules
+```mermaid
+flowchart TD
+    subgraph STORIES_JSON["outputs/stories.json"]
+        J1["Valid JSON array, no trailing commas"]
+        J2["summary: string, max 120 chars"]
+        J3["description: relative path e.g. outputs/stories/story-1.md"]
+        J4["parent: real key | tempId | null for Epic"]
+        J5["tempId: optional, unique, for new Epics"]
+        J6["priority: Highest | High | Medium | Low | Lowest"]
+        J7["storyPoints: integer, Stories only, max 5"]
+        J8["blockedBy: [tempId or real key], sets Blocked status"]
+        J9["integrates: [tempId or real key], parallel merge, do NOT add to blockedBy"]
+        J10["Bug: type Bug, no parent/storyPoints/blockedBy/integrates"]
+    end
 
-## outputs/stories.json
+    subgraph COMMENT["outputs/comment.md"]
+        C1["Tracker format, no HTML"]
+        C2["Sections: summary, decomposition decisions, planned tickets, assumptions"]
+    end
 
-- Must be a valid JSON array (validate before finishing)
-- Each item must include:
-  - `"summary"` — string, max 120 characters
-  - `"description"` — string, relative file path (e.g. `"outputs/stories/story-1.md"`)
-  - `"parent"` — real tracker key (e.g. `"PROJECT-5"`), temp ID (e.g. `"temp-1"`), or absent/null for a new Epic
-  - `"tempId"` — optional string, unique within this array; assign to new Epics so Stories can reference them via `"parent"`
-  - `"priority"` — one of: `Highest`, `High`, `Medium`, `Low`, `Lowest`
-  - `"storyPoints"` — integer, Stories only (1–2 simple, 3–5 medium, 8–13 complex); max 5 SP — split if larger; omit for Epics
-  - `"blockedBy"` — optional array of tempIds or real tracker keys this story cannot start until they are done. Creates dependency links and sets status to Blocked where supported. Example: `["temp-1", "PROJECT-5"]`
-  - `"integrates"` — optional array of tempIds or real tracker keys of parallel stories that will be combined with this one. Creates relation links where supported. Use when two parallel streams must eventually be merged. Example: `["temp-2"]`
-- **Bug entries** — use when the intake describes a broken/malfunctioning existing feature (not a new feature):
-  - `"type": "Bug"` — required, signals this is a bug ticket
-  - No `"parent"` — bugs are top-level tickets
-  - `"summary"`, `"description"`, `"priority"` — same as stories
-  - No `"storyPoints"`, `"blockedBy"`, `"integrates"` — not applicable
-  - Bug is automatically moved to *Ready For Development* after creation
-  - Example: `{ "type": "Bug", "summary": "Video playback freezes on iOS Safari", "description": "outputs/stories/bug-1.md", "priority": "High" }`
-- No trailing commas, no comments inside JSON
+    subgraph DESC["outputs/stories/story-N.md & epic-N.md"]
+        D1["Start directly with content, no header"]
+        D2["Tracker format"]
+        D3["NO Acceptance Criteria"]
+        D4["No filler, be specific"]
+    end
 
-## outputs/comment.md
+    subgraph STRUCT["Description structure"]
+        S1["h3. Goal — what & why"]
+        S2["h3. Scope — minimal requirements: functional, data, behaviour, integrations, constraints"]
+        S3["h3. Out of scope — explicitly NOT included"]
+        S4["h3. Notes — assumptions, questions, links"]
+    end
 
-- Use the target tracker format
-- No HTML tags
-- Sections: intake summary, decomposition decisions, planned ticket list, assumptions/open questions
-
-## outputs/stories/story-N.md and epic-N.md
-
-- Start directly with content — no introductory header or preamble
-- Use the target tracker format
-- Do NOT write Acceptance Criteria — that is handled by a separate agent
-- No filler, no water — be specific
-
-Each description must cover:
-
-*h3. Goal*
-One or two sentences: what this ticket delivers and why it matters.
-
-*h3. Scope*
-Bullet list of minimal requirements — concrete things that MUST be done to consider this story complete. Think: what would a developer need to know to start implementation? Include:
-* Key functional requirements (what the system must do)
-* Data or entities involved
-* User-facing behaviour or API surface, if relevant
-* Integration points or dependencies with other systems/tickets
-* Known constraints (e.g. must reuse existing component X, must not break Y)
-
-*h3. Out of scope*
-Bullet list of what is explicitly NOT part of this ticket (to avoid scope creep). Omit section if nothing to exclude.
-
-*h3. Notes*
-Assumptions made, open questions, links to related tickets or designs. Omit section if nothing to add.
+    STORIES_JSON --> DESC
+    DESC --> STRUCT
+```
