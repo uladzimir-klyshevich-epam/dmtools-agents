@@ -1,76 +1,46 @@
-Your task is to generate question subtasks for the story. Read all files in the 'input' folder.
+```mermaid
+flowchart TD
+    subgraph INPUT["Read input/ folder"]
+        I1["request.md — full ticket details, requirements, agent instructions"]
+        I2["comments.md — ticket history, context, prior decisions"]
+        I3["List ALL files: ls -la input/ && ls -la input/TICKET-*/"]
+        I4["Text files: cat"]
+        I5["Images (.png, .jpg, .jpeg, .gif, .webp): view with Read tool — describe designs/UI"]
+    end
 
-Always read these files first if present:
-- `request.md` — full ticket details, requirements, and all agent instructions including formatting rules and role context
-- `comments.md` — ticket comment history with context and prior decisions
+    subgraph RULES["Rules"]
+        R1["Follow ALL instructions from request.md strictly"]
+        R2["Description files follow tracker-specific formatting"]
+        R3["Description files NEVER contain a title line"]
+        R4["summary → subtask title automatically"]
+        R5["Title: field value → summary in JSON, NOT description .md"]
+        R6[".md starts directly with body content"]
+    end
 
-**CRITICAL: Follow ALL instructions found in `request.md` strictly.** The request.md contains the full agent configuration including formatting rules, role, and known info.
+    subgraph EXAMPLES["Correct vs Wrong"]
+        E1["CORRECT: starts with h2. Background"]
+        E2["WRONG: starts with Title: [Q] ..."]
+    end
 
-**CRITICAL: Read ALL files in the input folder, including images.**
-List the input folder with `ls -la input/` and then the ticket subfolder (e.g. `ls -la input/TICKET-*/`) and read every file found:
-- Text/markdown files: read with `cat`
-- Image files (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`): **view them using the Read tool** — they may contain UI mockups, designs, or screenshots that are essential context. If an image shows a design or UI, describe what you see and use it to avoid asking questions that are already answered by the design.
+    subgraph CHECKS["Additional Checks"]
+        C1["Navigation & discoverability:<br/>How user reaches feature?<br/>Clear path from entry point?"]
+        C2["UI styles & visual accessibility:<br/>Avoid low-contrast combinations<br/>Ask for colour palette / design tokens<br/>Suggest WCAG AA 4.5:1 contrast"]
+    end
 
-**CRITICAL: Description files must follow the tracker-specific formatting rules provided in `request.md`, formatting instructions, or provider modules.**
+    subgraph OUTPUT["Write outputs"]
+        O1["outputs/questions/question-1.md, question-2.md, ..."]
+        O2["outputs/questions.json — plain JSON array [ ... ]"]
+        O3["No questions → write []"]
+    end
 
-**CRITICAL: Description files must NEVER contain a title line.**
-The `summary` field in `questions.json` becomes the generated subtask title automatically. Writing a title inside the description file creates a duplicate heading in the tracker.
+    subgraph FORMAT["JSON Format"]
+        F1["CORRECT: [ {summary, priority, description} ]"]
+        F2["WRONG: { questions: [ ... ] } — never wrap in object"]
+    end
 
-If a question template you are following shows a `Title:` field — that value goes into the `summary` field of `questions.json`, NOT into the description `.md` file. The `.md` file starts directly with the body content.
-
-✅ CORRECT description file — starts directly with content:
+    INPUT --> RULES
+    RULES --> EXAMPLES
+    RULES --> CHECKS
+    CHECKS --> OUTPUT
+    OUTPUT --> FORMAT
 ```
-h2. Background
-
-The story lists three candidate solutions for making customer number generation collision-free,
-but no preferred approach has been chosen yet.
-
-h2. Question
-
-Which of the three proposed solutions should be implemented?
-```
-
-❌ WRONG — do NOT add a title line at the top:
-```
-Title: [Q] Confirm uniqueness strategy for customer number generation
-
-h2. Background
-...
-```
-
-In addition to functional questions, always check:
-
-*Navigation & discoverability:* How will a user reach this feature? Is there a clear path from the app entry point (homepage / nav menu) to this screen or action? If the route is not obvious or not yet covered by another story, raise a question about it.
-
-*UI styles & visual accessibility:* Does the story involve any UI elements? If so, raise a question to confirm that the design avoids low-contrast combinations (e.g. grey text on white background). Ask for a specific colour palette or reference to design tokens / style guide. Include a suggestion: prefer contrast ratios that meet WCAG AA (4.5:1 for normal text). **Skip this question if an image/design already shows the colour palette clearly.**
-
-Write individual description files to outputs/questions/ and the question plan to outputs/questions.json according to instructions.
-
-**CRITICAL: `outputs/questions.json` must be a plain JSON array.** The root element MUST be `[` … `]`. Never wrap it in an object.
-
-✅ CORRECT format:
-```json
-[
-  {
-    "summary": "Confirm query strategy for bulk data retrieval",
-    "priority": "Major",
-    "description": "outputs/questions/question-1.md"
-  },
-  {
-    "summary": "Clarify sharing model for the new custom object",
-    "priority": "Minor",
-    "description": "outputs/questions/question-2.md"
-  }
-]
-```
-
-❌ WRONG — do NOT wrap in an object:
-```json
-{
-  "questions": [
-    { "summary": "...", "priority": "...", "description": "..." }
-  ]
-}
-```
-
-If there are no questions to raise, write an empty array `[]` — not `{"questions": []}`.
