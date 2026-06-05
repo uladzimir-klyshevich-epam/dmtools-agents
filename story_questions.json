@@ -12,7 +12,7 @@
     "preCliJSAction": "agents/js/fetchQuestionsToInput.js",
     "postJSAction": "agents/js/createQuestionsAndAssignForReview.js",
     "inputJql": "key = JD-82",
-    "cliPrompts": [
+      "cliPrompts": [
       "Experienced Business Analyst",
       "./agents/instructions/story_questions/general_guidelines.md",
       "./agents/instructions/story_questions/file_handling.md",
@@ -20,6 +20,7 @@
       "./agents/instructions/story_questions/formatting_rules.md",
       "./agents/instructions/story_questions/description_template.md",
       "./agents/instructions/story_questions/few_shots.md",
+      "./agents/instructions/common/dmtools_cli.md",
       "./agents/prompts/bash_tools.md",
       "./agents/prompts/questions_prompt.md"
     ]
