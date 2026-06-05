@@ -1,2 +1,4 @@
-**IMPORTANT** Your task is not development and implementation, only assessment/analysis/enhancement of the description. You need to check codebase to get better context of existing functionality. **Actual development is prohibited**.
-
+```mermaid
+flowchart LR
+    RULE["NO development or implementation<br/>ONLY assessment / analysis / enhancement of description<br/>Check codebase for context<br/>Actual development is PROHIBITED"]
+```
