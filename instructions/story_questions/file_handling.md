@@ -13,8 +13,7 @@ flowchart TD
     subgraph CONFLUENCE_RULE["Confluence pages in input/ — READ THEM, don't re-fetch"]
         C1["✅ DO: cat input/TICKET/confluence/PageName.md"]
         C2["❌ DON'T: call dmtools confluence_* to re-fetch pages already in input/"]
-        C3["input/confluence/ may also contain images — use dmtools AI vision if needed"]
-        C3b["dmtools gemini_ai_chat_with_files --data '{message: describe this diagram, filePaths: [input/TICKET/confluence/diagram.png]}'"]
+        C3["input/confluence/ may also contain images — analyze them too"]
     end
 
     subgraph DMTOOLS_RULE["When to use dmtools for Confluence"]
