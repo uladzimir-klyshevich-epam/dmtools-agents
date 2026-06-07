@@ -4,16 +4,6 @@
     "metadata": {
       "contextId": "pr_rework"
     },
-    "agentParams": {
-      "aiRole": "Senior Developer Engineer focused on code fixes",
-      "instructions": [
-        "./agents/instructions/rework/rework_instructions.md"
-      ],
-      "knownInfo": "",
-      "formattingRules": "./agents/instructions/development/formatting_rules.md",
-      "fewShots": ""
-    },
-    "cliPrompt": "./agents/prompts/pr_rework_prompt.md",
     "cliCommands": [
       "./agents/scripts/run-agent.sh"
     ],
@@ -34,7 +24,21 @@
     },
     "inputJql": "key = PROJ-243",
     "cliPrompts": [
+      "Senior Developer Engineer focused on code fixes",
+      "./agents/instructions/common/coding_guidelines.md",
+      "./agents/instructions/common/input_context_reading.md",
+      "./agents/instructions/pr_rework/general_guidelines.md",
+      "./agents/instructions/pr_rework/formatting_rules.md",
+      "./agents/instructions/common/dmtools_cli.md",
       "./agents/prompts/bash_tools.md"
-    ]
+    ],
+    "cliPromptsByTracker": {
+      "jira": [
+        "./agents/instructions/tracker/jira_comment_format.md"
+      ],
+      "ado": [
+        "./agents/instructions/tracker/ado_comment_format.md"
+      ]
+    }
   }
 }
