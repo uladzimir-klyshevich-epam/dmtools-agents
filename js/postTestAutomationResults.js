@@ -2,7 +2,7 @@
  * Post Test Automation Results Action (postJSAction for test_case_automation)
  * 1. Reads outputs/test_automation_result.json
  * 2. Stages testing/ folder, commits, pushes, creates PR to main
- * 3. Posts Jira comment from outputs/jira_comment.md
+ * 3. Posts tracker comment from outputs/tracker_comment.md (fallback: comment.md, jira_comment.md)
  * 4. If passed:          moves ticket to In Review - Passed
  * 5. If failed:          moves Test Case to In Review - Failed (bug created by bug_creation agent on Failed)
  * 6. If blocked_by_human: moves ticket to Blocked, posts what credentials/data are needed,
@@ -70,13 +70,13 @@ function markdownToJiraWiki(markdown) {
 }
 
 function readJiraComment(params, workingDir, ticketKey) {
-    var jiraComment = readOutputFile('jira_comment.md', workingDir, ticketKey);
+    var jiraComment = readOutputFile('tracker_comment.md', workingDir, ticketKey);
     if (jiraComment) return jiraComment;
 
     jiraComment = readOutputFile('comment.md', workingDir, ticketKey);
     if (jiraComment) return jiraComment;
 
-    jiraComment = readOutputFile('tracker_comment.md', workingDir, ticketKey);
+    jiraComment = readOutputFile('jira_comment.md', workingDir, ticketKey);
     if (jiraComment) return jiraComment;
 
     return markdownToJiraWiki(params.response || readOutputFile('response.md', workingDir, ticketKey) || '');
