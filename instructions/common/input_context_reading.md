@@ -3,14 +3,12 @@ flowchart TD
     subgraph INPUT_ORDER["⚠️ MANDATORY: Read input files FIRST before anything else"]
         I0["find input/ -type f | sort — list all available files"]
         I1["1️⃣ instruction.md (repo root) — project stack, deployment constraints, approved frameworks"]
-        I2["2️⃣ input/TICKET/request.md — full ticket: description, AC, Solution field, Diagrams field"]
+        I2["2️⃣ input/TICKET/request.md — ticket description, requirements, solution design, diagrams"]
         I3["3️⃣ input/TICKET/comments.md — existing discussion, prior decisions, linked info"]
         I4["4️⃣ input/TICKET/existing_questions.json — answered questions = binding requirements"]
-        I5["5️⃣ input/TICKET/parent_context_ba.md — business rules and user flows from parent epic"]
-        I6["6️⃣ input/TICKET/parent_context_sa.md — technical design, API contracts, data model from parent epic"]
-        I7["7️⃣ input/TICKET/parent_context_vd.md — UI mockups, component specs, design notes from parent epic"]
-        I8["8️⃣ Check for images in input/TICKET/ — *.png *.jpg *.gif *.svg"]
-        I0 --> I1 --> I2 --> I3 --> I4 --> I5 --> I6 --> I7 --> I8
+        I5["5️⃣ input/TICKET/confluence/*.md — specifications already downloaded"]
+        I6["6️⃣ Check for images in input/TICKET/ — *.png *.jpg *.gif *.svg"]
+        I0 --> I1 --> I2 --> I3 --> I4 --> I5 --> I6
     end
 
     subgraph CONFLUENCE_RULE["Confluence pages in input/ — READ THEM, don't re-fetch"]
@@ -27,5 +25,11 @@ flowchart TD
         A1 -->|not found| A3
     end
 
-    INPUT_ORDER --> CONFLUENCE_RULE --> ATTACH_RULE
+    subgraph DMTOOLS_RULE["When to use dmtools for external data"]
+        D1["ONLY if you need data NOT already in input/"]
+        D2["dmtools jira_get_ticket KEY, dmtools confluence_search QUERY, etc."]
+        D3["See instructions/common/dmtools_cli.md for full reference"]
+    end
+
+    INPUT_ORDER --> CONFLUENCE_RULE --> ATTACH_RULE --> DMTOOLS_RULE
 ```

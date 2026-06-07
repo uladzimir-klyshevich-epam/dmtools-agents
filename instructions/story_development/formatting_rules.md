@@ -1,7 +1,8 @@
 ```mermaid
 flowchart TD
-    F1["outputs/response.md must be a markdown document"]
-    F2["Required sections:<br/>## Issues/Notes (if any)<br/>## Approach<br/>## Files Modified<br/>## Test Coverage"]
-    F3["Content must be focused and technical — a developer should immediately understand what was done and how to verify"]
-    F4["DO NOT repeat ticket requirements verbatim — focus on implementation decisions"]
+    F1["outputs/response.md is a PR description — not a report or essay"]
+    F2["Use bullet points and short sentences, not paragraphs"]
+    F3["Technical focus: WHAT changed and WHY, not WHAT the ticket asked for"]
+    F4["If including mermaid diagram: wrap in &lt;details&gt;&lt;summary&gt;Architecture&lt;/summary&gt;...&lt;/details&gt;"]
+    F5["Code snippets in verification section only — keep them short"]
 ```

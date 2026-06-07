@@ -18,8 +18,8 @@
     "inputJql": "key in (JD-82)",
     "cliPrompts": [
       "Senior Developer Engineer",
+      "./agents/instructions/common/input_context_reading.md",
       "./agents/instructions/story_development/general_guidelines.md",
-      "./agents/instructions/story_development/file_handling.md",
       "./agents/instructions/story_development/tdd_approach.md",
       "./agents/instructions/story_development/output_rules.md",
       "./agents/instructions/story_development/formatting_rules.md",
