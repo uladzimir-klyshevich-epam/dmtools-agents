@@ -351,7 +351,11 @@ Automated assertions are required but not enough. Also validate the scenario as 
 - Verify externally observable outcome a user or client would rely on
 - Do not stop at "request returned 200" if the test expects specific user-visible behavior
 
-Include human-style verification in output summaries.
+Include human-style verification in output summaries. Document in `outputs/tracker_comment.md` and `outputs/pr_body.md`:
+- what was checked by automation;
+- what was checked as a real user/human-style scenario;
+- what was observed;
+- whether it matched the expected result.
 
 ## Output Files
 
@@ -579,26 +583,6 @@ If `merge_conflicts.md` is present in the input folder, the test branch could no
 If the Test Case requires behavior that is missing or broken in the current production code on `main`, do not fake a passing result by pre-authoring the expected final state in fixtures or by weakening the assertions. Write the best test-only reproduction you can through the production-visible UI, CLI, service, repository API, or file format that the Test Case targets.
 
 When that reproduction fails because production behavior is missing or broken, set `outputs/test_automation_result.json` to `"status": "failed"` and write a detailed `outputs/bug_description.md`. Missing product behavior is a failed test/product bug, not `blocked_by_human`; the downstream workflow creates or links a Bug from the failed Test Case.
-
-## Real human-style verification
-
-In addition to automated assertions, verify the behavior as a user would experience it.
-
-For UI and content-heavy cases, this is especially important:
-- Check visible text, labels, headings, descriptions, validation messages, placeholders, button text, empty states, and error messages.
-- Verify the text is shown in the correct place and state, not merely present somewhere in HTML/source/API output.
-- Prefer user-facing selectors and observations (role, label, visible text, screenshots/logs) over implementation details.
-- If the test case is about content correctness, compare the meaningful text precisely enough to catch wording regressions.
-
-For API/background cases:
-- Verify the observable outcome that a user, UI, or integrated client depends on.
-- Do not mark the test passed only because an internal call returned success if the expected user-facing result was not confirmed.
-
-Document this verification in `outputs/tracker_comment.md` and `outputs/pr_body.md`:
-- what was checked by automation;
-- what was checked as a real user/human-style scenario;
-- what was observed;
-- whether it matched the expected result.
 
 ## ⚠️ CRITICAL: When the test FAILS — write a detailed bug report
 

@@ -96,7 +96,11 @@ Automated assertions are required but not enough. Also validate the scenario as 
 - Verify externally observable outcome a user or client would rely on
 - Do not stop at "request returned 200" if the test expects specific user-visible behavior
 
-Include human-style verification in output summaries.
+Include human-style verification in output summaries. Document in `outputs/tracker_comment.md` and `outputs/pr_body.md`:
+- what was checked by automation;
+- what was checked as a real user/human-style scenario;
+- what was observed;
+- whether it matched the expected result.
 
 ## Output Files
 
