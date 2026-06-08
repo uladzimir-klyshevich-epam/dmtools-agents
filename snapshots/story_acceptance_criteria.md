@@ -41,44 +41,40 @@ EOF
 
 # Enhanced Story Content Guidelines
 
-Use these guidelines to decide what content belongs in the enhanced story output. Keep wording specific and useful; avoid generic filler.
+Keep wording specific and useful; avoid generic filler.
 
-## No water words in description
+```mermaid
+flowchart TD
+    subgraph NO["❌ No water words"]
+        N1["Avoid: user-friendly, seamless, robust, intuitive, enhanced, improved"]
+        N2["Use concrete: business facts, user actions, system behavior, data rules"]
+        N3["Do not restate ticket title to fill space"]
+    end
 
-- Do not use vague phrases such as "user-friendly", "seamless", "robust", "intuitive", "enhanced", or "improved" unless the output immediately explains the measurable behavior.
-- Prefer concrete business facts, user actions, system behavior, data rules, and acceptance conditions.
-- Do not restate the ticket title in different words just to fill a section.
+    subgraph SP["Story Points"]
+        S1["1-3 SP: simple, single component"]
+        S2["5-8 SP: medium, multiple components"]
+        S3["8-13 SP: complex, cross-system"]
+        S4[">13 SP: split into multiple stories"]
+    end
 
-## Story Points Guidelines
+    subgraph AC["Acceptance Criteria"]
+        A1["Critical and testable"]
+        A2["Group related under AC categories"]
+        A3["Bullets, NO checkboxes [ ]"]
+        A4["Present tense: 'The system does...'"]
+        A5["Each AC independently testable"]
+        A6["Link to child tickets: (see DMC-123)"]
+        A7["Treat existing_questions.json answers as binding"]
+    end
 
-- `1-3 SP`: Simple feature, single component.
-- `5-8 SP`: Medium complexity, multiple components.
-- `8-13 SP`: Complex feature, cross-system integration.
-- If the story appears larger than `13 SP`, state that it should be split into multiple stories and explain the split candidates.
+    NO --> SP --> AC
+```
 
-## Acceptance Criteria Best Practices
+## Examples
 
-- Acceptance Criteria are critical and must be testable.
-- Group related requirements under AC categories.
-- Use bullets for testable requirements.
-- Do not use checkboxes (`[ ]`).
-- Write in present tense: "The system does...", not "The system will...".
-- Each AC category should be independently testable.
-- Link ACs to specific subtasks or question tickets for traceability when the requirement comes from child-ticket context, for example `(see DMC-123)`.
-- Treat answered questions from `existing_questions.json` as binding requirements. Do not fall back to original/default values if an answer overrides them.
-
-## Business Context Examples
-
-- "Users need secure authentication to protect sensitive data."
-- "Manual process causes delays and errors, automation is needed."
-- "Integration is required to synchronize data between systems."
-
-## Out of Scope Examples
-
-- Advanced features planned for future releases.
-- Non-functional requirements handled separately.
-- External system integrations not part of the current sprint.
-
+- **Business Context**: "Users need secure authentication to protect sensitive data."
+- **Out of Scope**: "Advanced features planned for future releases."
 
 
 ---
@@ -149,66 +145,33 @@ flowchart TD
 
 # Enhanced Story Template Guidelines
 
-Use Jira wiki-style markdown exactly as shown below. Keep section headings in bold using `*Heading:*`. Do not use markdown checkboxes.
+Use Jira wiki-style markdown. Section headings in bold: `*Heading:*`. No markdown checkboxes.
 
-The output must include every top-level section in this order:
-1. `*Story Points:*`
-2. `*Business Context:*`
-3. `*User Story:*`
-4. `*Acceptance Criteria:*`
-5. `*Business Rules:*`
-6. `*Out of Scope:*`
+```mermaid
+flowchart TD
+    subgraph SECTIONS["Required Sections (in order)"]
+        S1["*Story Points:* [1-13]"]
+        S2["*Business Context:*<br/>Why needed, problem solved, value provided"]
+        S3["*User Story:*<br/>As a [type] I want [action] So that [value]"]
+        S4["*Acceptance Criteria:*<br/>AC 1 - [Category]<br/>- [testable req 1]<br/>- [testable req 2]"]
+        S5["*Business Rules:*<br/>- [constraints, policies, validations]"]
+        S6["*Out of Scope:*<br/>- [explicitly not included]<br/>- [future enhancements]"]
+    end
 
-*Story Points:* [1-13]
+    subgraph RULES["Formatting Rules"]
+        R1["Replace all [placeholders] with concrete content"]
+        R2["Never omit a top-level section — use 'Not identified' if empty"]
+        R3["AC numbering: AC 1, AC 2, AC 3 (NOT AC-1 — Jira Smart Link conflict)"]
+        R4["Plain bullets under each AC category"]
+        R5["No intro, conclusion, ticket key heading, or 'Acceptance Criteria for...' prefix"]
+    end
 
-*Business Context:*
-[Why is this needed from business perspective? What problem does it solve? What value does it provide?]
+    SECTIONS --> RULES
+```
 
-*User Story:*
-As a [user type]
-I want to [action/functionality]
-So that [business value/benefit]
+**IMPORTANT**: Read `input/existing_questions.json` for answered questions as context. Run `dmtools jira_get_ticket KEY` for full details.
 
-*Acceptance Criteria:*
-AC 1 - [Category Name]
-- [Specific, testable requirement 1]
-- [Specific, testable requirement 2]
-- [Specific, testable requirement 3]
-
-AC 2 - [Category Name]
-- [Specific, testable requirement 1]
-- [Specific, testable requirement 2]
-
-AC 3 - [Category Name]
-- [Specific, testable requirement 1]
-- [Specific, testable requirement 2]
-
-[Continue with additional ACs as needed...]
-
-*Business Rules:*
-- [Business rule 1 - constraints, policies, regulations]
-- [Business rule 2 - system behavior requirements]
-- [Business rule 3 - data validation rules]
-
-*Out of Scope:*
-- [Feature/functionality explicitly not included in this story]
-- [Future enhancements not part of current scope]
-- [Related features that require separate stories]
-
-## Formatting rules
-
-- Replace all bracketed placeholders with concrete content.
-- Do not omit any top-level section. If there is no confirmed content for a mandatory section, write a concise explicit fallback such as `- Not identified from available context.`.
-- Omit placeholder-only bullets only after replacing the section with real content or an explicit `Not identified from available context.` bullet.
-- Keep AC numbering sequential: `AC 1`, `AC 2`, `AC 3`.
-- Never write AC identifiers in the form `AC-1`, `AC-2`, etc. (uppercase letters, hyphen, digits with no trailing colon). Jira's Smart Link engine matches `[A-Z]+-[0-9]+` and, because `AC` is a real project key, every such token is auto-rendered as an inline ticket card inside the Acceptance Criteria section. Always use the space-separated form `AC 1`, `AC 2`, `AC 3` instead.
-- Use plain bullets under each AC category.
-- Do not add an introduction, conclusion, ticket key heading, or "Acceptance Criteria for ..." prefix.
-- If critical information is missing, put the blocker at the top and keep any useful existing context below it.
-
-**IMPORTANT** Read 'input/existing_questions.json' to see existing question subtasks for this story (fields: key, summary, description, status, answer). Use answered questions as context. If you need full details run: `dmtools jira_get_ticket KEY`.
-
-**IMPORTANT** You must check child tickets and parent story for better context using: `dmtools jira_search_by_jql`.
+**IMPORTANT**: Check child tickets and parent story via `dmtools jira_search_by_jql` for better context.
 
 
 ---
