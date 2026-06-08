@@ -1,10 +1,6 @@
 {
   "name": "Teammate",
   "params": {
-    "agentParams": {
-      "aiRole": "Developer",
-      "instructions": []
-    },
     "skipAIProcessing": true,
     "preJSAction": "agents/restoreDescription.js",
     "inputJql": "key = PROJ-1234"
