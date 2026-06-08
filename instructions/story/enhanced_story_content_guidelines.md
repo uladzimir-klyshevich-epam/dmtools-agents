@@ -1,40 +1,36 @@
 # Enhanced Story Content Guidelines
 
-Use these guidelines to decide what content belongs in the enhanced story output. Keep wording specific and useful; avoid generic filler.
+Keep wording specific and useful; avoid generic filler.
 
-## No water words in description
+```mermaid
+flowchart TD
+    subgraph NO["❌ No water words"]
+        N1["Avoid: user-friendly, seamless, robust, intuitive, enhanced, improved"]
+        N2["Use concrete: business facts, user actions, system behavior, data rules"]
+        N3["Do not restate ticket title to fill space"]
+    end
 
-- Do not use vague phrases such as "user-friendly", "seamless", "robust", "intuitive", "enhanced", or "improved" unless the output immediately explains the measurable behavior.
-- Prefer concrete business facts, user actions, system behavior, data rules, and acceptance conditions.
-- Do not restate the ticket title in different words just to fill a section.
+    subgraph SP["Story Points"]
+        S1["1-3 SP: simple, single component"]
+        S2["5-8 SP: medium, multiple components"]
+        S3["8-13 SP: complex, cross-system"]
+        S4[">13 SP: split into multiple stories"]
+    end
 
-## Story Points Guidelines
+    subgraph AC["Acceptance Criteria"]
+        A1["Critical and testable"]
+        A2["Group related under AC categories"]
+        A3["Bullets, NO checkboxes [ ]"]
+        A4["Present tense: 'The system does...'"]
+        A5["Each AC independently testable"]
+        A6["Link to child tickets: (see DMC-123)"]
+        A7["Treat existing_questions.json answers as binding"]
+    end
 
-- `1-3 SP`: Simple feature, single component.
-- `5-8 SP`: Medium complexity, multiple components.
-- `8-13 SP`: Complex feature, cross-system integration.
-- If the story appears larger than `13 SP`, state that it should be split into multiple stories and explain the split candidates.
+    NO --> SP --> AC
+```
 
-## Acceptance Criteria Best Practices
+## Examples
 
-- Acceptance Criteria are critical and must be testable.
-- Group related requirements under AC categories.
-- Use bullets for testable requirements.
-- Do not use checkboxes (`[ ]`).
-- Write in present tense: "The system does...", not "The system will...".
-- Each AC category should be independently testable.
-- Link ACs to specific subtasks or question tickets for traceability when the requirement comes from child-ticket context, for example `(see DMC-123)`.
-- Treat answered questions from `existing_questions.json` as binding requirements. Do not fall back to original/default values if an answer overrides them.
-
-## Business Context Examples
-
-- "Users need secure authentication to protect sensitive data."
-- "Manual process causes delays and errors, automation is needed."
-- "Integration is required to synchronize data between systems."
-
-## Out of Scope Examples
-
-- Advanced features planned for future releases.
-- Non-functional requirements handled separately.
-- External system integrations not part of the current sprint.
-
+- **Business Context**: "Users need secure authentication to protect sensitive data."
+- **Out of Scope**: "Advanced features planned for future releases."
