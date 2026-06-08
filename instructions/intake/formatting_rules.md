@@ -1,37 +1,53 @@
-```mermaid
-flowchart TD
-    subgraph STORIES_JSON["outputs/stories.json"]
-        J1["Valid JSON array, no trailing commas"]
-        J2["summary: string, max 120 chars"]
-        J3["description: relative path e.g. outputs/stories/story-1.md"]
-        J4["parent: real key | tempId | null for Epic"]
-        J5["tempId: optional, unique, for new Epics"]
-        J6["priority: Highest | High | Medium | Low | Lowest"]
-        J7["storyPoints: integer, Stories only, max 5"]
-        J8["blockedBy: [tempId or real key], sets Blocked status"]
-        J9["integrates: [tempId or real key], parallel merge, do NOT add to blockedBy"]
-        J10["Bug: type Bug, no parent/storyPoints/blockedBy/integrates"]
-    end
+# Intake output formatting rules
 
-    subgraph COMMENT["outputs/comment.md"]
-        C1["Tracker format, no HTML"]
-        C2["Sections: summary, decomposition decisions, planned tickets, assumptions"]
-    end
+## `outputs/stories.json`
 
-    subgraph DESC["outputs/stories/story-N.md & epic-N.md"]
-        D1["Start directly with content, no header"]
-        D2["Tracker format"]
-        D3["NO Acceptance Criteria"]
-        D4["No filler, be specific"]
-    end
+- Must be a valid JSON array with no trailing commas.
+- Each item may represent an Epic, Story, or Bug.
 
-    subgraph STRUCT["Description structure"]
-        S1["h3. Goal — what & why"]
-        S2["h3. Scope — minimal requirements: functional, data, behaviour, integrations, constraints"]
-        S3["h3. Out of scope — explicitly NOT included"]
-        S4["h3. Notes — assumptions, questions, links"]
-    end
+| Field | Type | Notes |
+|-------|------|-------|
+| `type` | string | `Epic`, `Story`, or `Bug` |
+| `summary` | string | Max 120 characters, concise, actionable, imperative |
+| `description` | string | Relative path, e.g. `outputs/stories/story-1.md` |
+| `parent` | string \| null | Real tracker key, `tempId`, or `null` for Epic |
+| `tempId` | string | Optional, unique identifier for new Epics referenced by Stories |
+| `priority` | string | `Highest`, `High`, `Medium`, `Low`, `Lowest` |
+| `storyPoints` | integer | Stories only, max 5 |
+| `blockedBy` | array | Of `tempId` or real keys; sets `Blocked` status |
+| `integrates` | array | Of `tempId` or real keys; parallel merge, do NOT add to `blockedBy` |
+| `attachments` | array | Relative paths to files copied under `outputs/attachments/` |
 
-    STORIES_JSON --> DESC
-    DESC --> STRUCT
+### Bug-specific rules
+
+- `type` must be `Bug`.
+- Do NOT include `parent`, `storyPoints`, `blockedBy`, or `integrates`.
+- Write the bug description to `outputs/stories/bug-N.md`.
+
+## `outputs/comment.md`
+
+- Tracker-agnostic Markdown summary. Tracker-specific formatting is applied by `cliPromptsByTracker` (Jira wiki vs ADO Markdown).
+- Include sections: summary, decomposition decisions, planned tickets, assumptions.
+
+## Description files: `outputs/stories/story-N.md`, `epic-N.md`, `bug-N.md`
+
+- Start directly with content — no header line.
+- Use tracker-appropriate heading syntax (e.g. `###` for Markdown-based trackers, `h3.` for Jira wiki).
+- Do NOT include Acceptance Criteria.
+- Avoid filler; be specific.
+
+### Description structure
+
+```
+### Goal
+ what & why
+
+### Scope
+ minimal requirements: functional, data, behaviour, integrations, constraints
+
+### Out of scope
+ explicitly NOT included
+
+### Notes
+ assumptions, questions, links
 ```
