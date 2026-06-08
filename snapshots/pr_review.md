@@ -123,42 +123,20 @@ flowchart TD
 
 ### [7] `./agents/instructions/pr_review/few_shots.md`
 
-Example PR review outputs — keep everything concise:
+Example PR review outputs — keep concise:
 
 ### outputs/pr_review.json
 ```json
 {
   "recommendation": "BLOCK",
-  "summary": "SQL injection vulnerability in UserService.js must be fixed before merge.",
-  "prNumber": null,
-  "prUrl": null,
+  "summary": "SQL injection in UserService.js must be fixed before merge.",
   "generalComment": "outputs/pr_review_general.md",
-  "resolvedThreadIds": [],
   "inlineComments": [
-    {
-      "path": "src/auth/UserService.js",
-      "line": 45,
-      "startLine": 43,
-      "side": "RIGHT",
-      "body": "🚨 **BLOCKING: SQL Injection** — Use parameterized queries instead of string concatenation.",
-      "severity": "BLOCKING"
-    },
-    {
-      "path": "src/auth/LoginController.js",
-      "line": 78,
-      "side": "RIGHT",
-      "body": "⚠️ **IMPORTANT: Weak Password Validation** — Minimum 6 chars is insufficient. Require 8+ with mixed case, numbers, and symbols.",
-      "severity": "IMPORTANT"
-    },
-    {
-      "path": "src/utils/validation.js",
-      "line": 23,
-      "side": "RIGHT",
-      "body": "💡 **SUGGESTION: DRY** — Email validation is duplicated in 3 files. Extract to a shared utility.",
-      "severity": "SUGGESTION"
-    }
+    {"path":"src/auth/UserService.js","line":45,"body":"🚨 BLOCKING: SQL Injection — Use parameterized queries.","severity":"BLOCKING"},
+    {"path":"src/auth/LoginController.js","line":78,"body":"⚠️ IMPORTANT: Weak Password Validation — Require 8+ chars with mixed case, numbers, symbols.","severity":"IMPORTANT"},
+    {"path":"src/utils/validation.js","line":23,"body":"💡 SUGGESTION: DRY — Email validation duplicated in 3 files. Extract to shared utility.","severity":"SUGGESTION"}
   ],
-  "issueCounts": { "blocking": 1, "important": 1, "suggestions": 1 }
+  "issueCounts": {"blocking":1,"important":1,"suggestions":1}
 }
 ```
 
@@ -166,28 +144,12 @@ Example PR review outputs — keep everything concise:
 ```markdown
 ## Automated Code Review — BLOCK
 
-**Summary**: SQL injection vulnerability blocks merge. One important issue (weak password validation) and one suggestion (extract duplicated validation).
+**Summary**: SQL injection blocks merge. One important issue (weak password validation) and one suggestion (extract duplicated validation).
 
 **Next Steps**:
 1. Fix SQL injection in UserService.js — use parameterized queries
 2. Strengthen password validation (8+ chars, mixed case, numbers, symbols)
 3. Extract shared email validation utility
-```
-
-### outputs/response.md (tracker-agnostic, concise)
-```markdown
-### Summary
-BLOCK — SQL injection vulnerability in UserService.js must be fixed before merge.
-
-### Key Issues
-- 🚨 **BLOCKING**: SQL injection (UserService.js:45) — use parameterized queries
-- ⚠️ **IMPORTANT**: Weak password validation (LoginController.js:78) — require 8+ chars
-- 💡 **SUGGESTION**: Extract duplicated email validation to shared utility
-
-### Next Steps
-1. Fix SQL injection
-2. Strengthen password validation
-3. Extract shared validation utility
 ```
 
 
@@ -197,55 +159,34 @@ BLOCK — SQL injection vulnerability in UserService.js must be fixed before mer
 
 ## DMTools CLI — External Data Access
 
-When you need additional context from Jira, Confluence, ADO, or GitHub that is not already
-in the `input/` folder, use the `dmtools` CLI directly via shell commands.
+Use `dmtools` CLI only when data is **not** already in `input/`.
 
 ```mermaid
 flowchart TD
-    A[Need external data?] --> B{Source}
-    B -->|Jira ticket / search| C[dmtools jira_get_ticket KEY\ndmtools jira_search_by_jql JQL]
-    B -->|Confluence page| D[dmtools confluence_get_page_by_url URL\ndmtools confluence_search QUERY]
-    B -->|Azure DevOps| E[dmtools ado_get_work_item ID\ndmtools ado_search_work_items QUERY]
-    B -->|GitHub| F[dmtools github_get_issue REPO NUM\ndmtools github_search_code QUERY]
-    C --> G[Parse JSON output]
-    D --> G
-    E --> G
-    F --> G
-    G --> H[Use content in your response]
+    NEED["Need external context?"] --> CHECK{"Already in input/?"}
+    CHECK -->|Yes| READ["Read local files — NO API call"]
+    CHECK -->|No| SOURCE{"Source"}
+
+    SOURCE -->|Jira| J["dmtools jira_get_ticket KEY<br/>dmtools jira_search_by_jql JQL"]
+    SOURCE -->|Confluence| C["dmtools confluence_get_page_by_url URL<br/>dmtools confluence_search QUERY"]
+    SOURCE -->|ADO| A["dmtools ado_get_work_item ID<br/>dmtools ado_search_work_items QUERY"]
+    SOURCE -->|GitHub| G["dmtools github_get_issue REPO NUM<br/>dmtools github_search_code QUERY"]
+
+    J --> PARSE["Parse JSON → use in response"]
+    C --> PARSE
+    A --> PARSE
+    G --> PARSE
+
+    subgraph RULES["⚠️ Rules"]
+        R1["Check input/ first — avoid redundant fetches"]
+        R2["Handle errors gracefully — continue with available info"]
+        R3["Cite sources — mention where data came from"]
+    end
+
+    PARSE --> RULES
+
+    NOTE["Examples:<br/>dmtools jira_get_ticket PROJ-456<br/>dmtools confluence_search 'parser spec'<br/>dmtools confluence_get_page_by_url URL"] -.-> NEED
 ```
-
-### When to use dmtools CLI
-
-- Confluence pages linked in the ticket were **not** written to `input/confluence/`
-  (e.g. Confluence is on a different domain or not configured)
-- You need to fetch a **related Jira ticket** mentioned in the description
-- You need **ADO work items**, **GitHub issues**, or **pull requests** for context
-- You need to **search** for similar tickets or pages
-
-### Examples
-
-```bash
-# Fetch a Confluence page by URL
-dmtools confluence_get_page_by_url "https://wiki.example.com/wiki/spaces/SPACE/pages/123/Title"
-
-# Get a Jira ticket
-dmtools jira_get_ticket PROJ-456
-
-# Search Confluence
-dmtools confluence_search "sample sheet parser specification"
-
-# Search Jira
-dmtools jira_search_by_jql "project = PROJ AND summary ~ 'sample sheet'"
-```
-
-### Guidelines
-
-1. **Check `input/` first** — read `input/*/confluence/` and `input/*/request.md` before
-   making external calls to avoid redundant fetches.
-2. **Use dmtools only when needed** — don't fetch data that is already available locally.
-3. **Handle errors gracefully** — dmtools may return an error if a resource is not accessible;
-   continue with available information and note the missing context.
-4. **Cite sources** — when using data fetched via dmtools, mention the source in your response.
 
 
 ---

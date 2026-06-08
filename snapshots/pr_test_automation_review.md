@@ -128,49 +128,21 @@ flowchart TD
 
 ### [7] `./agents/instructions/pr_test_automation_review/few_shots.md`
 
-Example PR test automation review outputs — keep everything concise:
+Example PR test automation review outputs — keep concise:
 
 ### outputs/pr_review.json
 ```json
 {
   "recommendation": "BLOCK",
-  "summary": "Test uses hardcoded selectors and sleeps instead of explicit waits. Architecture violates layered design (test calls framework directly).",
-  "prNumber": null,
-  "prUrl": null,
+  "summary": "Test uses hardcoded selectors and sleeps instead of explicit waits. Architecture violates layered design.",
   "generalComment": "outputs/pr_review_general.md",
-  "resolvedThreadIds": [],
   "inlineComments": [
-    {
-      "path": "testing/tests/TEST-123/test_login.py",
-      "line": 34,
-      "startLine": 32,
-      "side": "RIGHT",
-      "body": "🚨 **BLOCKING: Hardcoded selector** — Use Page Object method `login_page.username_field` instead of raw `page.locator('#user')`.",
-      "severity": "BLOCKING"
-    },
-    {
-      "path": "testing/tests/TEST-123/test_login.py",
-      "line": 45,
-      "side": "RIGHT",
-      "body": "🚨 **BLOCKING: time.sleep(5)** — Replace with Playwright's `expect(...).to_be_visible(timeout=5000)`. Tests must be deterministic.",
-      "severity": "BLOCKING"
-    },
-    {
-      "path": "testing/tests/TEST-123/test_login.py",
-      "line": 12,
-      "side": "RIGHT",
-      "body": "⚠️ **IMPORTANT: Missing config.yaml** — Each test folder must include `config.yaml` with framework, platform, and dependencies.",
-      "severity": "IMPORTANT"
-    },
-    {
-      "path": "testing/components/pages/login_page.py",
-      "line": 8,
-      "side": "RIGHT",
-      "body": "💡 **SUGGESTION: Add type hints** — Constructor parameters lack types. Add `driver: IWebDriver` and return types for public methods.",
-      "severity": "SUGGESTION"
-    }
+    {"path":"testing/tests/TEST-123/test_login.py","line":34,"body":"🚨 BLOCKING: Hardcoded selector — Use Page Object method login_page.username_field instead of raw page.locator('#user').","severity":"BLOCKING"},
+    {"path":"testing/tests/TEST-123/test_login.py","line":45,"body":"🚨 BLOCKING: time.sleep(5) — Replace with Playwright's expect(...).to_be_visible(timeout=5000).","severity":"BLOCKING"},
+    {"path":"testing/tests/TEST-123/test_login.py","line":12,"body":"⚠️ IMPORTANT: Missing config.yaml — Each test folder must include config.yaml with framework, platform, and dependencies.","severity":"IMPORTANT"},
+    {"path":"testing/components/pages/login_page.py","line":8,"body":"💡 SUGGESTION: Add type hints — Constructor parameters lack types. Add driver: IWebDriver and return types.","severity":"SUGGESTION"}
   ],
-  "issueCounts": { "blocking": 2, "important": 1, "suggestions": 1 }
+  "issueCounts": {"blocking":2,"important":1,"suggestions":1}
 }
 ```
 
@@ -178,29 +150,12 @@ Example PR test automation review outputs — keep everything concise:
 ```markdown
 ## Automated Test PR Review — BLOCK
 
-**Summary**: Test contains hardcoded selectors and `time.sleep()`, violating architecture and determinism rules. Missing `config.yaml`.
+**Summary**: Test contains hardcoded selectors and time.sleep(), violating architecture and determinism rules. Missing config.yaml.
 
 **Next Steps**:
-1. Extract selectors into `LoginPage` Page Object
-2. Replace `time.sleep()` with explicit waits
-3. Add `config.yaml` with framework/platform/dependencies
-```
-
-### outputs/response.md (tracker-agnostic, concise)
-```markdown
-### Summary
-BLOCK — Test uses hardcoded selectors and sleeps; missing config.yaml.
-
-### Key Issues
-- 🚨 **BLOCKING**: Hardcoded selector (test_login.py:34) — use Page Object
-- 🚨 **BLOCKING**: `time.sleep(5)` (test_login.py:45) — use explicit wait
-- ⚠️ **IMPORTANT**: Missing `config.yaml` (test folder root)
-- 💡 **SUGGESTION**: Add type hints to LoginPage constructor
-
-### Next Steps
-1. Extract selectors into Page Object
-2. Replace sleeps with explicit waits
-3. Add config.yaml
+1. Extract selectors into LoginPage Page Object
+2. Replace time.sleep() with explicit waits
+3. Add config.yaml with framework/platform/dependencies
 ```
 
 
@@ -210,55 +165,34 @@ BLOCK — Test uses hardcoded selectors and sleeps; missing config.yaml.
 
 ## DMTools CLI — External Data Access
 
-When you need additional context from Jira, Confluence, ADO, or GitHub that is not already
-in the `input/` folder, use the `dmtools` CLI directly via shell commands.
+Use `dmtools` CLI only when data is **not** already in `input/`.
 
 ```mermaid
 flowchart TD
-    A[Need external data?] --> B{Source}
-    B -->|Jira ticket / search| C[dmtools jira_get_ticket KEY\ndmtools jira_search_by_jql JQL]
-    B -->|Confluence page| D[dmtools confluence_get_page_by_url URL\ndmtools confluence_search QUERY]
-    B -->|Azure DevOps| E[dmtools ado_get_work_item ID\ndmtools ado_search_work_items QUERY]
-    B -->|GitHub| F[dmtools github_get_issue REPO NUM\ndmtools github_search_code QUERY]
-    C --> G[Parse JSON output]
-    D --> G
-    E --> G
-    F --> G
-    G --> H[Use content in your response]
+    NEED["Need external context?"] --> CHECK{"Already in input/?"}
+    CHECK -->|Yes| READ["Read local files — NO API call"]
+    CHECK -->|No| SOURCE{"Source"}
+
+    SOURCE -->|Jira| J["dmtools jira_get_ticket KEY<br/>dmtools jira_search_by_jql JQL"]
+    SOURCE -->|Confluence| C["dmtools confluence_get_page_by_url URL<br/>dmtools confluence_search QUERY"]
+    SOURCE -->|ADO| A["dmtools ado_get_work_item ID<br/>dmtools ado_search_work_items QUERY"]
+    SOURCE -->|GitHub| G["dmtools github_get_issue REPO NUM<br/>dmtools github_search_code QUERY"]
+
+    J --> PARSE["Parse JSON → use in response"]
+    C --> PARSE
+    A --> PARSE
+    G --> PARSE
+
+    subgraph RULES["⚠️ Rules"]
+        R1["Check input/ first — avoid redundant fetches"]
+        R2["Handle errors gracefully — continue with available info"]
+        R3["Cite sources — mention where data came from"]
+    end
+
+    PARSE --> RULES
+
+    NOTE["Examples:<br/>dmtools jira_get_ticket PROJ-456<br/>dmtools confluence_search 'parser spec'<br/>dmtools confluence_get_page_by_url URL"] -.-> NEED
 ```
-
-### When to use dmtools CLI
-
-- Confluence pages linked in the ticket were **not** written to `input/confluence/`
-  (e.g. Confluence is on a different domain or not configured)
-- You need to fetch a **related Jira ticket** mentioned in the description
-- You need **ADO work items**, **GitHub issues**, or **pull requests** for context
-- You need to **search** for similar tickets or pages
-
-### Examples
-
-```bash
-# Fetch a Confluence page by URL
-dmtools confluence_get_page_by_url "https://wiki.example.com/wiki/spaces/SPACE/pages/123/Title"
-
-# Get a Jira ticket
-dmtools jira_get_ticket PROJ-456
-
-# Search Confluence
-dmtools confluence_search "sample sheet parser specification"
-
-# Search Jira
-dmtools jira_search_by_jql "project = PROJ AND summary ~ 'sample sheet'"
-```
-
-### Guidelines
-
-1. **Check `input/` first** — read `input/*/confluence/` and `input/*/request.md` before
-   making external calls to avoid redundant fetches.
-2. **Use dmtools only when needed** — don't fetch data that is already available locally.
-3. **Handle errors gracefully** — dmtools may return an error if a resource is not accessible;
-   continue with available information and note the missing context.
-4. **Cite sources** — when using data fetched via dmtools, mention the source in your response.
 
 
 ---
