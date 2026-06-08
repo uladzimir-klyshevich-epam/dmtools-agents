@@ -40,7 +40,7 @@ Do NOT write them inside `input/`, `input/TICKET-KEY/`, or any subfolder of `inp
 
 Run `mkdir -p outputs` first to ensure the directory exists.
 
-- `outputs/jira_comment.md` — Jira wiki markup test result summary
+- `outputs/tracker_comment.md` — tracker-formatted test result summary (format via cliPromptsByTracker)
 - `outputs/pr_body.md` — GitHub Markdown PR body
 - `outputs/response.md` — backward-compatible Markdown summary
 - `outputs/test_automation_result.json` — **MANDATORY — always write this file**, even if the test failed or errored. Use exactly this format:
@@ -54,7 +54,7 @@ Run `mkdir -p outputs` first to ensure the directory exists.
   The `"status"` field **must** be exactly `"passed"` or `"failed"` (lowercase). Missing or wrong field name causes the pipeline to break.
 - `outputs/bug_description.md` — detailed tracker-formatted bug report (only if test FAILED)
 
-`jira_comment.md` and `pr_body.md` contain the same facts but are formatted for different consumers: Jira wiki markup vs GitHub Markdown. Do not put GitHub Markdown into `jira_comment.md`.
+`tracker_comment.md` and `pr_body.md` contain the same facts but are formatted for different consumers: tracker markup vs GitHub Markdown. Do not put GitHub Markdown into `tracker_comment.md`.
 
 ## Real human-style verification
 
@@ -70,7 +70,7 @@ For API/background cases:
 - Verify the observable outcome that a user, UI, or integrated client depends on.
 - Do not mark the test passed only because an internal call returned success if the expected user-facing result was not confirmed.
 
-Document this verification in `outputs/jira_comment.md` and `outputs/pr_body.md`:
+Document this verification in `outputs/tracker_comment.md` and `outputs/pr_body.md`:
 - what was checked by automation;
 - what was checked as a real user/human-style scenario;
 - what was observed;
@@ -97,6 +97,6 @@ If the test fails, `outputs/bug_description.md` **must** contain enough detail f
 
 5. **Screenshots or logs** — if Playwright, attach screenshot path; paste relevant log lines.
 
-The same level of detail applies to `outputs/jira_comment.md` — the Jira comment must clearly state **which step failed and why**, not just "FAILED".
+The same level of detail applies to `outputs/tracker_comment.md` — the tracker comment must clearly state **which step failed and why**, not just "FAILED".
 
 Do NOT create branches or push. Do NOT modify any code outside `testing/`.

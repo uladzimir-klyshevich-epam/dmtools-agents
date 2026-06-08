@@ -25,13 +25,17 @@
     "inputJql": "key = JD-111",
     "cliPrompts": [
       "Senior QA Automation Engineer",
+      "./agents/instructions/common/coding_guidelines.md",
+      "./agents/instructions/common/input_context_reading.md",
+      "./agents/instructions/test_case_automation/general_guidelines.md",
+      "./agents/instructions/test_case_automation/formatting_rules.md",
       "./agents/instructions/test_automation/test_automation_architecture.md",
       "./agents/instructions/test_automation/test_automation_instructions.md",
       "./agents/instructions/test_automation/test_automation_output_files.md",
       "./agents/instructions/test_automation/test_automation_json_output.md",
-      "./agents/instructions/test_automation/test_automation_output_files.md",
       "./agents/prompts/test_case_automation_prompt.md",
-      "./agents/prompts/bash_tools.md"
+      "./agents/prompts/bash_tools.md",
+      "./agents/instructions/common/dmtools_cli.md"
     ],
     "cliPromptsByTracker": {
       "jira": [
