@@ -4,18 +4,6 @@
     "metadata": {
       "contextId": "pr_test_automation_rework"
     },
-    "agentParams": {
-      "aiRole": "Senior QA Automation Engineer focused on test code fixes",
-      "instructions": [
-        "./agents/instructions/test_automation/test_automation_architecture.md",
-        "./agents/instructions/test_automation/test_automation_instructions.md",
-        "./agents/instructions/test_automation/test_automation_json_output.md",
-        "./agents/instructions/rework/rework_instructions.md"
-      ],
-      "knownInfo": "",
-      "formattingRules": "./agents/instructions/development/formatting_rules.md"
-    },
-    "cliPrompt": "./agents/prompts/pr_test_automation_rework_prompt.md",
     "cliCommands": [
       "./agents/scripts/run-agent.sh"
     ],
@@ -33,8 +21,21 @@
     },
     "inputJql": "project = JD AND issuetype = 'Test Case' AND status = 'In Rework'",
     "cliPrompts": [
-      "./agents/prompts/bash_tools.md",
-      "./agents/prompts/codegraph_tools.md"
-    ]
+      "Senior QA Automation Engineer focused on test code fixes",
+      "./agents/instructions/common/coding_guidelines.md",
+      "./agents/instructions/common/input_context_reading.md",
+      "./agents/instructions/pr_test_automation_rework/general_guidelines.md",
+      "./agents/instructions/pr_test_automation_rework/formatting_rules.md",
+      "./agents/instructions/common/dmtools_cli.md",
+      "./agents/prompts/bash_tools.md"
+    ],
+    "cliPromptsByTracker": {
+      "jira": [
+        "./agents/instructions/tracker/jira_comment_format.md"
+      ],
+      "ado": [
+        "./agents/instructions/tracker/ado_comment_format.md"
+      ]
+    }
   }
 }
