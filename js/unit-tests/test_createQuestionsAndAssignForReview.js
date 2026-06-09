@@ -53,8 +53,9 @@ function loadCreateQuestionsAction(mocks) {
 }
 
 suite('createQuestionsAndAssignForReview', function() {
-    test('sends priority as a string in jira_create_ticket_with_json', function() {
+    test('sets priority via jira_set_priority, not in fieldsJson', function() {
         var createCalls = [];
+        var priorityCalls = [];
         var module = loadCreateQuestionsAction({
             file_read: function(pathOrOpts) {
                 var path = typeof pathOrOpts === 'string' ? pathOrOpts : pathOrOpts.path;
@@ -75,6 +76,9 @@ suite('createQuestionsAndAssignForReview', function() {
             jira_create_ticket_with_json: function(args) {
                 createCalls.push(args);
                 return { key: 'PROJ-22' };
+            },
+            jira_set_priority: function(args) {
+                priorityCalls.push(args);
             }
         });
 
@@ -92,6 +96,9 @@ suite('createQuestionsAndAssignForReview', function() {
 
         assert.equal(result.success, true, 'action succeeds');
         assert.equal(createCalls.length, 1, 'one question ticket created');
-        assert.equal(createCalls[0].fieldsJson.priority, 'Medium', 'priority is mapped and sent as string');
+        assert.ok(!createCalls[0].fieldsJson.priority, 'priority must not be in fieldsJson');
+        assert.equal(priorityCalls.length, 1, 'jira_set_priority called once');
+        assert.equal(priorityCalls[0].key, 'PROJ-22', 'priority set on created ticket');
+        assert.equal(priorityCalls[0].priority, 'Medium', 'priority is mapped correctly');
     });
 });

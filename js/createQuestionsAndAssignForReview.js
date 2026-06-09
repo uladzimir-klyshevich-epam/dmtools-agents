@@ -100,10 +100,9 @@ function createQuestion(entry, parentKey, projectKey, jiraConfig, priorityMap) {
         labels: [questionLabel]
     };
 
-    if (entry.priority) {
-        var resolvedPriority = (priorityMap && priorityMap[entry.priority]) || entry.priority;
-        fieldsJson.priority = resolvedPriority;
-    }
+    var resolvedPriority = entry.priority
+        ? ((priorityMap && priorityMap[entry.priority]) || entry.priority)
+        : null;
 
     if (entry.answer) {
         fieldsJson[answerField] = entry.answer;
@@ -115,6 +114,13 @@ function createQuestion(entry, parentKey, projectKey, jiraConfig, priorityMap) {
             fieldsJson: fieldsJson
         });
         var key = extractTicketKey(result);
+        if (key && resolvedPriority) {
+            try {
+                jira_set_priority({ key: key, priority: resolvedPriority });
+            } catch (priorityError) {
+                console.warn('Created ' + key + ' but failed to set priority: ' + resolvedPriority, priorityError);
+            }
+        }
         console.log('Created question subtask ' + (key || '(unknown key)') + ': ' + summary);
         return key;
     } catch (error) {
