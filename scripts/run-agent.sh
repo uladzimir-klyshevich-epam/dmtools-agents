@@ -212,46 +212,48 @@ elif [ "$PROVIDER" = "copilot" ]; then
   echo "Working directory: $(pwd)"
   echo ""
 
-  # For large prompts, passing -p "$PROMPT" as a CLI argument can exceed Linux ARG_MAX
-  # (E2BIG / "Argument list too long"). Use stdin redirect instead: the CLI reads from
-  # stdin when it is not a TTY (e.g. inside CI pipes). The prompt file path is already
-  # available as $PROMPT_ARG when DMTools calls this script with cliPrompt.
-  # PASS_ARGS support: flags like --continue --resume are forwarded to the copilot CLI.
-  copilot_should_use_prompt_flag() {
-    if [ "${COPILOT_SESSION_MODE:-none}" != "none" ]; then
+  # Avoid passing very large prompts via "-p", which can exceed Linux MAX_ARG_STRLEN.
+  # Prefer stdin when a prompt file is available (the normal DMTools path), including
+  # session flags such as --resume/--continue.
+  COPILOT_PROMPT_ARG_MAX_BYTES="${COPILOT_PROMPT_ARG_MAX_BYTES:-120000}"
+
+  copilot_should_use_stdin_prompt() {
+    if [ -f "${PROMPT_ARG}" ]; then
       return 0
     fi
-
-    for pass_arg in "${PASS_ARGS[@]:-}"; do
-      case "${pass_arg}" in
-        --continue|--resume|--resume=*|--session-id|--session-id=*|--name|--name=*)
-          return 0
-          ;;
-      esac
-    done
-
+    if [ "${PROMPT_BYTES}" -gt "${COPILOT_PROMPT_ARG_MAX_BYTES}" ]; then
+      return 0
+    fi
     return 1
   }
 
   run_copilot_once() {
     local log_file="$1"
     local model="$2"
+    local prompt_stdin_file=""
+    local cleanup_prompt_stdin_file=0
 
     set +e
-    if copilot_should_use_prompt_flag; then
-      echo "Running: ${COPILOT_CMD[*]} --allow-all --model ${model} ${COPILOT_SESSION_ARGS[*]:-} ${PASS_ARGS[*]:-} -p <prompt:${PROMPT_BYTES} bytes>"
-      echo ""
-      "${COPILOT_CMD[@]}" --allow-all --model "${model}" ${COPILOT_SESSION_ARGS[@]+"${COPILOT_SESSION_ARGS[@]}"} ${PASS_ARGS[@]+"${PASS_ARGS[@]}"} -p "${PROMPT}" 2>&1 | tee "$log_file"
-    elif [ -f "${PROMPT_ARG}" ]; then
+    if copilot_should_use_stdin_prompt; then
+      if [ -f "${PROMPT_ARG}" ]; then
+        prompt_stdin_file="${PROMPT_ARG}"
+      else
+        prompt_stdin_file="$(mktemp)"
+        printf "%s" "${PROMPT}" > "${prompt_stdin_file}"
+        cleanup_prompt_stdin_file=1
+      fi
       echo "Running: ${COPILOT_CMD[*]} --allow-all --model ${model} ${COPILOT_SESSION_ARGS[*]:-} ${PASS_ARGS[*]:-} (prompt: ${PROMPT_BYTES} bytes via stdin)"
       echo ""
-      "${COPILOT_CMD[@]}" --allow-all --model "${model}" ${COPILOT_SESSION_ARGS[@]+"${COPILOT_SESSION_ARGS[@]}"} ${PASS_ARGS[@]+"${PASS_ARGS[@]}"} < "${PROMPT_ARG}" 2>&1 | tee "$log_file"
+      "${COPILOT_CMD[@]}" --allow-all --model "${model}" ${COPILOT_SESSION_ARGS[@]+"${COPILOT_SESSION_ARGS[@]}"} ${PASS_ARGS[@]+"${PASS_ARGS[@]}"} < "${prompt_stdin_file}" 2>&1 | tee "$log_file"
     else
       echo "Running: ${COPILOT_CMD[*]} --allow-all --model ${model} ${COPILOT_SESSION_ARGS[*]:-} ${PASS_ARGS[*]:-} -p <inline prompt>"
       echo ""
       "${COPILOT_CMD[@]}" --allow-all --model "${model}" ${COPILOT_SESSION_ARGS[@]+"${COPILOT_SESSION_ARGS[@]}"} ${PASS_ARGS[@]+"${PASS_ARGS[@]}"} -p "${PROMPT}" 2>&1 | tee "$log_file"
     fi
     local status=${PIPESTATUS[0]}
+    if [ "${cleanup_prompt_stdin_file}" -eq 1 ] && [ -n "${prompt_stdin_file}" ]; then
+      rm -f "${prompt_stdin_file}"
+    fi
     return "$status"
   }
 
