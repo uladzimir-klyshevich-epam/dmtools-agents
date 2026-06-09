@@ -7,7 +7,7 @@
  *   "newBugs": [
  *     {
  *       "summary": "...",
- *       "priority": "Medium",
+ *       "priority": "Minor",
  *       "descriptionFile": "outputs/bug_001_description.md",
  *       "linkedTCs": ["TS-984", "TS-954"]
  *     }

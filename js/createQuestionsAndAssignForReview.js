@@ -7,7 +7,7 @@
  * [
  *   {
  *     "summary": "Clarify requirements",          // [Q] prefix added automatically if missing
- *     "priority": "High",
+ *     "priority": "Major",
  *     "description": "outputs/questions/question-1.md",
  *     "answer": "..."                              // optional, pre-filled answer
  *   }

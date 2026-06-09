@@ -508,7 +508,7 @@ flowchart TD
   "bug": {
     "summary": "Bug: [what failed, max 120 chars]",
     "description": "outputs/bug_description.md",
-    "priority": "High"
+    "priority": "Major"
   }
 }
 ```

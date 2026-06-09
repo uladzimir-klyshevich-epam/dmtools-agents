@@ -112,7 +112,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     F1["outputs/questions.json must be a valid JSON array"]
-    F2["Each item:<br/>- summary: string, max 120 chars, no [Q] prefix<br/>- priority: Highest | High | Medium | Low | Lowest<br/>- description: relative path to .md file (e.g. outputs/questions/question-1.md)"]
+    F2["Each item:<br/>- summary: string, max 120 chars, no [Q] prefix<br/>- priority: Blocker | Critical | Major | Minor | Trivial<br/>- description: relative path to .md file (e.g. outputs/questions/question-1.md)"]
     F3["Avoid trailing commas"]
     F4["Description .md must NOT repeat summary — start directly with context/background/details"]
 ```
@@ -150,8 +150,8 @@ Rules:
 
 ```mermaid
 flowchart TD
-    E1["{<br/>summary: Clarify expected behavior when user has no payment method,<br/>priority: High,<br/>description: outputs/questions/question-1.md<br/>}"]
-    E2["{<br/>summary: Confirm scope: does this include mobile flows?,<br/>priority: Medium,<br/>description: outputs/questions/question-2.md<br/>}"]
+    E1["{<br/>summary: Clarify expected behavior when user has no payment method,<br/>priority: Major,<br/>description: outputs/questions/question-1.md<br/>}"]
+    E2["{<br/>summary: Confirm scope: does this include mobile flows?,<br/>priority: Minor,<br/>description: outputs/questions/question-2.md<br/>}"]
 ```
 
 
