@@ -136,7 +136,11 @@ function action(params) {
         var jiraConfig = projectConfig.jira;
         var labels = projectConfig.labels;
         var customParams = (params.jobParams && params.jobParams.customParams) || params.customParams || {};
-        var priorityMap = customParams.priorityMap || null;
+        var agentId = (params.metadata && params.metadata.agentId) || 'story_questions';
+        var jobParamPatch = projectConfig.jobParamPatches && projectConfig.jobParamPatches[agentId];
+        var priorityMap = customParams.priorityMap
+            || (jobParamPatch && jobParamPatch.customParams && jobParamPatch.customParams.priorityMap)
+            || null;
 
         console.log('Processing question creation for:', ticketKey);
         if (priorityMap) console.log('Priority map active:', JSON.stringify(priorityMap));
