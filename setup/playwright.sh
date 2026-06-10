@@ -20,14 +20,43 @@ if ! is_installed python3; then
   exit 1
 fi
 
-python3 -m pip install --upgrade pip
+# ── Skip if already installed ────────────────────────────────────────────────
+_check_playwright_installed() {
+  local desired_version="$1"
+  if ! python3 -c "import playwright" 2>/dev/null; then
+    return 1
+  fi
+  if [ "${desired_version}" = "latest" ] || [ -z "${desired_version}" ]; then
+    return 0
+  fi
+  local installed_version
+  installed_version="$(python3 -c "import playwright; print(playwright.__version__)" 2>/dev/null || echo "")"
+  if [ "${installed_version}" = "${desired_version}" ]; then
+    return 0
+  fi
+  return 1
+}
 
-if [ "${PLAYWRIGHT_VERSION}" = "latest" ] || [ -z "${PLAYWRIGHT_VERSION}" ]; then
-  python3 -m pip install playwright pytest
+_check_chromium_cached() {
+  local cache_dir="${HOME}/.cache/ms-playwright"
+  [ -d "${cache_dir}" ] && [ -n "$(find "${cache_dir}" -maxdepth 1 -type d -name 'chromium-*' 2>/dev/null)" ]
+}
+
+if _check_playwright_installed "${PLAYWRIGHT_VERSION}"; then
+  echo "✅ Playwright Python package already installed ($(python3 -c "import playwright; print(playwright.__version__)" 2>/dev/null || echo "unknown"))"
 else
-  python3 -m pip install "playwright==${PLAYWRIGHT_VERSION}" pytest
+  python3 -m pip install --upgrade pip
+  if [ "${PLAYWRIGHT_VERSION}" = "latest" ] || [ -z "${PLAYWRIGHT_VERSION}" ]; then
+    python3 -m pip install playwright pytest
+  else
+    python3 -m pip install "playwright==${PLAYWRIGHT_VERSION}" pytest
+  fi
 fi
 
-python3 -m playwright install --with-deps chromium
+if _check_chromium_cached; then
+  echo "✅ Playwright Chromium already cached"
+else
+  python3 -m playwright install --with-deps chromium
+fi
 
 echo "✅ Playwright $(python3 -m playwright --version 2>/dev/null || echo "${PLAYWRIGHT_VERSION}")"
