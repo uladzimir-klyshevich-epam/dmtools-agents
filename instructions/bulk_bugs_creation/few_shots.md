@@ -6,7 +6,7 @@ Example bulk bug decisions output:
   "newBugs": [
     {
       "summary": "Login button unresponsive on iOS Safari",
-      "priority": "Major",
+      "priority": "High",
       "descriptionFile": "outputs/bug_001_description.md",
       "linkedTCs": ["TS-984", "TS-954"]
     }

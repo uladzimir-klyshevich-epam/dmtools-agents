@@ -82,7 +82,7 @@ Write a JSON object with this structure:
   "newBugs": [
     {
       "summary": "Concise bug title describing component and symptom",
-      "priority": "Major",
+      "priority": "High",
       "descriptionFile": "outputs/bug_001_description.md",
       "linkedTCs": ["TS-984", "TS-954"]
     }
@@ -108,7 +108,7 @@ Write a JSON object with this structure:
 - Never leave a `processed` TC without one of those final outcomes. A missing outcome leaves the TC in Failed and forces cleanup/retry.
 - Do not output `fixedByBug`. Done bugs are excluded from bug matching; a current failed run with no matching non-Done bug requires a new bug unless it is clearly a test-code issue.
 - `skipped[].reason` MUST be a detailed explanation (not just "test issue") — explain the specific test code problem
-- `priority` must be one of: `Blocker`, `Critical`, `Major`, `Minor`, `Trivial`
+- `priority` must be one of: `Highest`, `High`, `Medium`, `Low`, `Lowest`
 - `descriptionFile` must reference a file you actually write (see below)
 - Do NOT embed multi-line description text inside this JSON
 

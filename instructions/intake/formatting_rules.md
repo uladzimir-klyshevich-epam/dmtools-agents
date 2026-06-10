@@ -12,7 +12,7 @@
 | `description` | string | Relative path, e.g. `outputs/stories/story-1.md` |
 | `parent` | string \| null | Real tracker key, `tempId`, or `null` for Epic |
 | `tempId` | string | Optional, unique identifier for new Epics referenced by Stories |
-| `priority` | string | `Blocker`, `Critical`, `Major`, `Minor`, `Trivial` |
+| `priority` | string | `Highest`, `High`, `Medium`, `Low`, `Lowest` |
 | `storyPoints` | integer | Stories only, max 5 |
 | `blockedBy` | array | Of `tempId` or real keys; sets `Blocked` status |
 | `integrates` | array | Of `tempId` or real keys; parallel merge, do NOT add to `blockedBy` |
