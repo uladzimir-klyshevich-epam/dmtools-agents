@@ -86,6 +86,12 @@ _cache_codemie() {
   export_var "CODEMIE_CACHE_KEY"  "codemie-${version}-${OS_TAG}"
 }
 
+_cache_kimi() {
+  local version="${1:-${KIMI_VERSION:-latest}}"
+  export_var "KIMI_CACHE_PATH" "${HOME}/.kimi-code"
+  export_var "KIMI_CACHE_KEY"  "kimi-${version}-${OS_TAG}"
+}
+
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 
 _dispatch_tool() {
@@ -100,6 +106,7 @@ _dispatch_tool() {
     codegraph) _cache_codegraph "${version}" ;;
     playwright) _cache_playwright "${version}" ;;
     codemie)  _cache_codemie  "${version}" ;;
+    kimi)     _cache_kimi     "${version}" ;;
     cursor)   echo "ℹ️  cursor-agent is not cacheable (part of Cursor IDE)" ;;
     *)        echo "⚠️  Unknown tool '${tool}' — skipping cache config" ;;
   esac
@@ -136,7 +143,7 @@ _print_info() {
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-ALL_TOOLS="java node dmtools maestro copilot copilot-session codemie codegraph playwright"  # cursor has no cache
+ALL_TOOLS="java node dmtools maestro copilot copilot-session codemie codegraph playwright kimi"  # cursor has no cache
 
 MODE="${1:-info}"
 shift || true
