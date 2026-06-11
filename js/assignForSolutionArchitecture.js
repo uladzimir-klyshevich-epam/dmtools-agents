@@ -9,6 +9,7 @@ const { LABELS, STATUSES } = require('./config.js');
 const configLoader = require('./configLoader.js');
 const scmModule = require('./common/scm.js');
 const autoStart = require('./common/autoStart.js');
+const tokenUsageComment = require('./common/tokenUsageComment.js');
 
 const ACCEPTANCE_CRITERIA_TRIGGER_LABELS = [
     'sm_story_acceptance_criteria_triggered',
@@ -69,6 +70,14 @@ function action(params) {
                 console.warn('Failed to remove trigger label "' + label + '":', e);
             }
         });
+
+        // Post token usage summary comments (e.g. [kimi_usage]: {...}) if any provider
+        // wrote outputs/*_usage.json during the agent run.
+        try {
+            tokenUsageComment.postTokenUsageComments(ticketKey);
+        } catch (e) {
+            console.warn('Failed to post token usage comments:', e);
+        }
 
         var autoStartSolution = customParams.autoStartSolution === true ||
             customParams.autoStartSolution === 'true';
