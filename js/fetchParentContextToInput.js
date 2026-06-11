@@ -451,4 +451,6 @@ function action(params) {
     }
 }
 
-module.exports = { action: action };
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { action: action };
+}
