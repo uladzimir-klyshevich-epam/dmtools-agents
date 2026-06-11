@@ -40,26 +40,75 @@ run_kimi() {
     kimi_model_args=(--model "${KIMI_MODEL}")
   fi
 
+  # Detect resume/continue mode. Kimi in non-interactive prompt mode cannot use
+  # --continue without an explicit session id (it would try to open an interactive
+  # session picker). When resume is requested, resolve the session id from
+  # KIMI_SESSION_ID or the persisted file from the previous run and replace the
+  # generic --continue/--resume flags with --session <id>.
+  local kimi_has_resume_arg=false
+  local kimi_has_session_arg=false
+  local pass_arg
+  for pass_arg in "${PASS_ARGS[@]:-}"; do
+    case "$pass_arg" in
+      --continue|--resume|--resume=*)
+        kimi_has_resume_arg=true
+        ;;
+      --session|--session=*|-S|-S=*)
+        kimi_has_session_arg=true
+        ;;
+    esac
+  done
+
+  local kimi_session_id="${KIMI_SESSION_ID:-}"
+  local kimi_session_args=()
+  local kimi_pass_args=("${PASS_ARGS[@]:-}")
+
+  if [ "${kimi_has_resume_arg}" = "true" ] && [ "${kimi_has_session_arg}" = "false" ]; then
+    if [ -z "${kimi_session_id}" ] && [ -f "outputs/kimi_session_id.txt" ]; then
+      kimi_session_id="$(tr -d '[:space:]' < outputs/kimi_session_id.txt || true)"
+    fi
+    if [ -z "${kimi_session_id}" ]; then
+      echo "Error: Kimi resume requested but no session id is available." >&2
+      echo "Set KIMI_SESSION_ID or run a non-resume agent first so the session id can be persisted." >&2
+      return 1
+    fi
+    echo "Resuming Kimi session: ${kimi_session_id}"
+    kimi_session_args=(--session "${kimi_session_id}")
+    # Drop --continue/--resume flags; keep any other pass-through args.
+    kimi_pass_args=()
+    for pass_arg in "${PASS_ARGS[@]:-}"; do
+      case "$pass_arg" in
+        --continue|--resume|--resume=*) ;;
+        *) kimi_pass_args+=("$pass_arg") ;;
+      esac
+    done
+  fi
+
   # Always use -p (non-interactive prompt mode) when stdin is not a TTY (CI).
   # Stdin mode causes kimi to enter interactive TUI which hangs/does nothing in CI.
   # For local interactive use, stdin is fine but -p is still preferred for reliability.
   local kimi_log
   kimi_log="$(mktemp)"
-  echo "Running: kimi ${kimi_model_args[*]:-} ${PASS_ARGS[*]:-} -p <prompt:${PROMPT_BYTES} bytes>"
+  echo "Running: kimi ${kimi_model_args[*]:-} ${kimi_session_args[*]:-} ${kimi_pass_args[*]:-} -p <prompt:${PROMPT_BYTES} bytes>"
   echo ""
   set +e
-  kimi ${kimi_model_args[@]+"${kimi_model_args[@]}"} ${PASS_ARGS[@]+"${PASS_ARGS[@]}"} --output-format "stream-json" -p "${PROMPT}" 2>&1 | tee "$kimi_log"
+  kimi ${kimi_model_args[@]+"${kimi_model_args[@]}"} ${kimi_session_args[@]+"${kimi_session_args[@]}"} ${kimi_pass_args[@]+"${kimi_pass_args[@]}"} --output-format "stream-json" -p "${PROMPT}" 2>&1 | tee "$kimi_log"
   local exit_code=${PIPESTATUS[0]}
   set -e
 
   record_codegraph_usage "$kimi_log"
 
-  # Extract the session id from Kimi's resume_hint so we can locate the wire file
-  # for this specific run. Kimi stores runtime data under KIMI_CODE_HOME.
-  local kimi_session_id=""
-  kimi_session_id="$(grep -o '"session_id":"[^"]*"' "$kimi_log" | head -1 | cut -d'"' -f4 || true)"
+  # Extract the session id from Kimi's output so we can locate the wire file
+  # for this specific run and resume later if a quality gate fails.
+  # Kimi stores runtime data under KIMI_CODE_HOME.
+  local new_session_id=""
+  new_session_id="$(grep -o '"session_id":"[^"]*"' "$kimi_log" | head -1 | cut -d'"' -f4 || true)"
+  if [ -n "${new_session_id}" ]; then
+    mkdir -p outputs
+    printf '%s\n' "${new_session_id}" > outputs/kimi_session_id.txt
+  fi
 
-  print_kimi_usage_summary_and_write_json "${kimi_session_id}"
+  print_kimi_usage_summary_and_write_json "${new_session_id:-${kimi_session_id}}"
 
   rm -f "$kimi_log"
 
