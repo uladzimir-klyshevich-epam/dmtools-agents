@@ -415,13 +415,31 @@ elif [ "$PROVIDER" = "kimi" ]; then
     local kimi_code_home="${KIMI_CODE_HOME:-${HOME}/.kimi-code}"
     local wire_file=""
 
+    echo "  KIMI_CODE_HOME: ${kimi_code_home}"
+    echo "  Session ID: ${session_id}"
+
     if [ -n "${session_id}" ]; then
       wire_file="$(find "${kimi_code_home}/sessions" -path "*/${session_id}/agents/main/wire.jsonl" -type f 2>/dev/null | head -1 || true)"
     fi
 
     if [ -z "${wire_file}" ] || [ ! -f "${wire_file}" ]; then
       echo "⚠️  No Kimi wire file found; cannot report token usage."
+      echo "  Sessions tree under ${kimi_code_home}:"
+      find "${kimi_code_home}" -maxdepth 4 -type d 2>/dev/null | sed 's/^/    /' || true
       return 0
+    fi
+
+    local wire_size
+    wire_size="$(wc -c < "${wire_file}" | tr -d ' ')"
+    echo "  Wire file: ${wire_file}"
+    echo "  Wire file size: ${wire_size} bytes"
+
+    if [ "${KIMI_PRINT_WIRE_FILE:-}" = "1" ]; then
+      echo "  Wire file contents:"
+      cat "${wire_file}"
+    else
+      echo "  First 10 lines of wire file:"
+      head -n 10 "${wire_file}" | sed 's/^/    /'
     fi
 
     python3 - "$wire_file" << 'PYEOF'
