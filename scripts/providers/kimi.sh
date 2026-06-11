@@ -171,4 +171,6 @@ print(f"  Total tokens:           {total:,}")
 print(f"  Written to:             {out_path}")
 print("================================")
 PYEOF
+
+  record_usage_file "outputs/${usage_name}_usage.json"
 }

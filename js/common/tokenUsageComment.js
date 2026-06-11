@@ -1,38 +1,68 @@
 /**
  * Token usage comment helper.
  *
- * Reads provider usage JSON files written by run-agent.sh (e.g. outputs/kimi_usage.json)
+ * Reads provider usage JSON files written by run-agent.sh (e.g. outputs/story_solution_usage.json)
  * and posts them as Jira comments in the form:
  *
- *   [kimi_usage]: {"provider":"kimi","total_tokens":12345,...}
+ *   [story_solution]: {"provider":"kimi","total_tokens":12345,...}
  *
- * The helper is provider-agnostic: any file matching outputs/*_usage.json is picked up.
+ * The helper is provider-agnostic. run-agent.sh records usage files in
+ * outputs/token_usage_files.json; this helper reads that manifest and posts a
+ * comment for every *_usage.json file it points to.
+ *
+ * IMPORTANT: This module runs inside the DMTools GraalJS bridge, where Node.js
+ * built-ins such as `fs` are NOT available. Use the exposed `file_read` tool.
  */
 
-const fs = require('fs');
-const path = require('path');
+var OUTPUTS_DIR = 'outputs';
+var USAGE_SUFFIX = '_usage.json';
+var MANIFEST_NAME = 'token_usage_files.json';
 
-const OUTPUTS_DIR = 'outputs';
-const USAGE_GLOB = '*_usage.json';
-
-function findUsageFiles(outputsDir) {
+function readTextFile(filePath) {
+    if (!filePath) {
+        return null;
+    }
     try {
-        return fs.readdirSync(outputsDir)
-            .filter(function(name) { return name.endsWith('_usage.json'); })
-            .map(function(name) { return path.join(outputsDir, name); });
+        var content = file_read({ path: filePath });
+        if (content) {
+            return content.toString();
+        }
     } catch (e) {
-        return [];
+        // File missing or unreadable — treat as absent.
+    }
+    return null;
+}
+
+function readJsonFile(filePath) {
+    var text = readTextFile(filePath);
+    if (!text) {
+        return null;
+    }
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        console.warn('Failed to parse JSON from ' + filePath + ': ' + (e.message || e));
+        return null;
     }
 }
 
-function readJsonSafe(filePath) {
-    try {
-        var raw = fs.readFileSync(filePath, 'utf8');
-        return JSON.parse(raw);
-    } catch (e) {
-        console.warn('Failed to read/parse usage file ' + filePath + ': ' + (e.message || e));
-        return null;
+function fileNameFromPath(filePath) {
+    if (!filePath) {
+        return '';
     }
+    var idx = filePath.lastIndexOf('/');
+    return idx >= 0 ? filePath.substring(idx + 1) : filePath;
+}
+
+function findUsageFiles(outputsDir) {
+    var manifestPath = outputsDir + '/' + MANIFEST_NAME;
+    var manifest = readJsonFile(manifestPath);
+    if (Array.isArray(manifest)) {
+        return manifest.filter(function(entry) {
+            return typeof entry === 'string' && entry.indexOf(USAGE_SUFFIX) !== -1;
+        });
+    }
+    return [];
 }
 
 function formatJiraMention(notifierId) {
@@ -47,10 +77,10 @@ function formatJiraMention(notifierId) {
 }
 
 function formatUsageComment(filePath, data, initiator) {
-    var baseName = path.basename(filePath, '.json');
+    var fileName = fileNameFromPath(filePath);
     // Strip the _usage suffix so the comment label matches the agent name
     // (e.g. outputs/story_acceptance_criteria_usage.json -> [story_acceptance_criteria]: {...})
-    var label = baseName.replace(/_usage$/, '');
+    var label = fileName.replace(/_usage\.json$/, '');
     var comment = '[' + label + ']: ' + JSON.stringify(data);
     var mention = formatJiraMention(initiator);
     if (mention) {
@@ -83,7 +113,7 @@ function postTokenUsageComments(ticketKey, options) {
     }
 
     usageFiles.forEach(function(filePath) {
-        var data = readJsonSafe(filePath);
+        var data = readJsonFile(filePath);
         if (!data) {
             errors.push(filePath + ' (parse error)');
             return;
@@ -105,8 +135,10 @@ function postTokenUsageComments(ticketKey, options) {
     return { posted: posted, files: files, errors: errors };
 }
 
-module.exports = {
-    postTokenUsageComments: postTokenUsageComments,
-    findUsageFiles: findUsageFiles,
-    formatUsageComment: formatUsageComment
-};
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        postTokenUsageComments: postTokenUsageComments,
+        findUsageFiles: findUsageFiles,
+        formatUsageComment: formatUsageComment
+    };
+}
