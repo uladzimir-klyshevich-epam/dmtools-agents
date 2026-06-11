@@ -482,7 +482,9 @@ Story/AC generation separates task instructions from formatting so each reposito
 |------|---------|
 | `prompts/acceptance_criteria_prompt.md` | Runtime task flow: read input, use answered questions, write `outputs/response.md` |
 | `instructions/story/enhanced_story_content_guidelines.md` | Content guidance: story points, business context, testable ACs, business rules, out of scope |
-| `instructions/story/enhanced_story_jira_formatting.md` | Jira-specific output format and section order |
+| `instructions/story/enhanced_story_formatting.md` | Tracker-agnostic story output structure and section order |
+| `instructions/tracker/jira_markup_transform.md` | Converts generic tags to Jira wiki markup |
+| `instructions/tracker/ado_markup_transform.md` | Converts generic tags to Azure DevOps Markdown |
 
 Project repositories can override or append their own guidance from `.dmtools/config.js`:
 

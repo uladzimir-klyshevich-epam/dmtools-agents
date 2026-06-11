@@ -277,82 +277,100 @@ flowchart TD
 
 ### Tracker: `jira`
 
-#### [1] `./agents/instructions/tracker/jira_question_description_format.md`
+#### [1] `./agents/instructions/tracker/jira_markup_transform.md`
 
-# Jira Question Description Format
+# Jira Markup Transform
 
-When writing question descriptions for Jira tracker, use **Jira wiki markup**.
+When writing output for Jira tracker fields or comments, transform the generic XML-style formatting tags below into Jira wiki markup. Do not write literal XML tags in the final output.
 
-| Element | Jira wiki markup | Example |
-|---------|------------------|---------|
-| Bold | `*text*` | `*Background:*` |
-| Italic | `_text_` | `_hint_` |
-| Bullet list | `* item` | `* Option A: ...` |
-| Numbered list | `# item` | `# Step one` |
-| Inline code | `{{code}}` | `{{main.dart}}` |
-| Link | `[title|url]` | `[TS-24|https://...]` |
+| Generic tag | Jira wiki markup | Example |
+|-------------|------------------|---------|
+| `<bold>X</bold>` | `*X*` | `*Background:*` |
+| `<italic>X</italic>` | `_X_` | `_hint_` |
+| `<strike>X</strike>` | `-X-` | `-deprecated-` |
+| `<underline>X</underline>` | `+X+` | `+important+` |
+| `<code>X</code>` | `{{X}}` | `{{main.dart}}` |
+| `<codeblock>X</codeblock>` | `{code}X{code}` | `{code}void main() {}{code}` |
+| `<codeblock:lang>X</codeblock:lang>` | `{code:lang}X{code}` | `{code:dart}void main() {}{code}` |
+| `<bullet> text` | `* text` | `* Option A` |
+| `<numbered> text` | `# text` | `# Step one` |
+| `<heading1>X</heading1>` | `h1. X` | `h1. Title` |
+| `<heading2>X</heading2>` | `h2. X` | `h2. Section` |
+| `<heading3>X</heading3>` | `h3. X` | `h3. Subsection` |
+| `<link>text\|url</link>` | `[text\|url]` | `[TS-24\|https://jira.example.com/browse/TS-24]` |
+| `<image>url</image>` | `!url!` | `!https://.../diagram.png!` |
+| `<image-thumb>url</image-thumb>` | `!url\|thumbnail!` | `!https://.../diagram.png\|thumbnail!` |
+| `<quote>X</quote>` | `{quote}X{quote}` | `{quote}cited text{quote}` |
+| `<panel>X</panel>` | `{panel}X{panel}` | `{panel}note{panel}` |
+| `<color color="red">X</color>` | `{color:red}X{color}` | `{color:red}alert{color}` |
+| `<hr>` | `----` | `----` |
 
 **Rules:**
-- Use `*text*` for bold — single asterisks, NOT `**` double asterisks.
-- Use `* item` for bullets — asterisk + space, NOT `- item` or Markdown lists.
-- Do NOT use Markdown headings (`#`, `##`, `###`).
-- Do NOT use fenced code blocks (triple backticks). Use `{code}...{code}` if needed.
-- Do NOT write literal XML tags like `<bold>` or `<bullet>`.
+- Replace every `<tag>...</tag>` or self-closing tag with the Jira wiki markup shown above.
+- Do NOT use Markdown syntax in Jira output: no `**bold**`, no `- item` bullets, no `# headings`, no triple backticks.
+- Use `* item` for bullets and `# item` for numbered lists.
+- For Mermaid diagrams in Jira fields that support them, wrap the diagram in `{code:mermaid}...{code}`.
+- For plain preformatted blocks, use `{noformat}...{noformat}`.
 
-**Correct example:**
-
-```text
-*Background:* 1-2 sentences explaining why this matters.
-
-*Question:* clear, specific question.
-
-*Options:*
-* Option A: description
-* Option B: description
-* Option C: description
-
-*Recommended Decision:* always provide your best guess even if uncertain.
-```
+**Full Jira wiki markup reference (Atlassian):**
+- `*text*` — bold
+- `_text_` — italic
+- `-text-` — strikethrough
+- `+text+` — underline
+- `^text^` — superscript
+- `~text~` — subscript
+- `{{text}}` — monospaced inline code
+- `{code}...{code}` — code block
+- `{code:java}...{code}` — language-specific code block
+- `{noformat}...{noformat}` — preformatted block
+- `[text\|url]` — link
+- `!image.png!` — embedded image
+- `h1.` ... `h6.` — headings
+- `* item` — bullet list
+- `# item` — numbered list
+- `||header||header||` / `|cell|cell|` — tables
+- `{quote}...{quote}` — block quote
+- `{panel}...{panel}` — panel
+- `{color:red}...{color}` — colored text
+- `----` — horizontal rule
 
 
 ---
 
 ### Tracker: `ado`
 
-#### [1] `./agents/instructions/tracker/ado_question_description_format.md`
+#### [1] `./agents/instructions/tracker/ado_markup_transform.md`
 
-# ADO Question Description Format
+# ADO Markup Transform
 
-When writing question descriptions for Azure DevOps tracker, render the generic formatting tags as Markdown:
+When writing output for Azure DevOps tracker fields or comments, transform the generic XML-style formatting tags below into GitHub-flavored Markdown. Do not write literal XML tags in the final output.
 
-| Generic tag | Markdown |
-|-------------|----------|
-| `<bold>X</bold>` | `**X**` |
-| `<bullet>` | `-` |
+| Generic tag | Markdown | Example |
+|-------------|----------|---------|
+| `<bold>X</bold>` | `**X**` | `**Background:**` |
+| `<italic>X</italic>` | `*X*` | `*hint*` |
+| `<strike>X</strike>` | `~~X~~` | `~~deprecated~~` |
+| `<underline>X</underline>` | `<u>X</u>` | `<u>important</u>` |
+| `<code>X</code>` | `` `X` `` | `` `main.dart` `` |
+| `<codeblock>X</codeblock>` | ` ```\nX\n``` ` | ` ```\nvoid main() {}\n``` ` |
+| `<codeblock:lang>X</codeblock:lang>` | ` ```lang\nX\n``` ` | ` ```dart\nvoid main() {}\n``` ` |
+| `<bullet> text` | `- text` | `- Option A` |
+| `<numbered> text` | `1. text` | `1. Step one` |
+| `<heading1>X</heading1>` | `# X` | `# Title` |
+| `<heading2>X</heading2>` | `## X` | `## Section` |
+| `<heading3>X</heading3>` | `### X` | `### Subsection` |
+| `<link>text\|url</link>` | `[text](url)` | `[TS-24](https://dev.azure.com/.../12345)` |
+| `<image>url</image>` | `![image](url)` | `![diagram](https://.../diagram.png)` |
+| `<quote>X</quote>` | `> X` | `> cited text` |
+| `<panel>X</panel>` | `> X` | `> note` |
+| `<color color="red">X</color>` | `<span style="color:red">X</span>` | `<span style="color:red">alert</span>` |
+| `<hr>` | `---` | `---` |
 
-Additional formatting rules:
-- `**bold**` — double asterisks for bold text
-- `- item` — dashes for bullet lists
-- `# headers` are allowed if needed
-
-```mermaid
-flowchart TD
-    subgraph SYNTAX["Markdown Syntax"]
-        S1["<bold>X</bold> → **X**"]
-        S2["<bullet> → - item"]
-        S3["**bold** — double asterisks for bold text"]
-        S4["# headers are allowed"]
-    end
-
-    subgraph EXAMPLE["Rendered Example"]
-        T1["**Background:** 1-2 sentences explaining why this matters"]
-        T2["**Question:** clear, specific question"]
-        T3["**Options:** 2-3 bullets (omit if only one valid path)"]
-        T4["**Recommended Decision:** always provide your best guess even if uncertain"]
-    end
-
-    SYNTAX --> EXAMPLE
-```
+**Rules:**
+- Replace every `<tag>...</tag>` or self-closing tag with the Markdown shown above.
+- Do NOT use Jira wiki markup in ADO output: no `*bold*`, no `* item` bullets, no `h2.` headings, no `{code}...{code}` blocks.
+- Use `- item` for bullets and `1. item` for numbered lists.
+- For Mermaid diagrams in ADO fields that support them, wrap the diagram in ` ```mermaid\n...\n``` `.
 
 
 ---

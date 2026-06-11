@@ -31,11 +31,13 @@
     "cliPromptsByTracker": {
       "jira": [
         "./agents/instructions/common/jira_context.md",
-        "./agents/instructions/tracker/jira_ac_reference_format.md"
+        "./agents/instructions/tracker/jira_markup_transform.md",
+        "./agents/instructions/enhancement/solution_design_ac_reference_format.md"
       ],
       "ado": [
         "./agents/instructions/tracker/ado_context.md",
-        "./agents/instructions/tracker/ado_ac_reference_format.md"
+        "./agents/instructions/tracker/ado_markup_transform.md",
+        "./agents/instructions/enhancement/solution_design_ac_reference_format.md"
       ]
     }
   }

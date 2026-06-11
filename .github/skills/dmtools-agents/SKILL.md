@@ -314,7 +314,9 @@ The story acceptance criteria agent separates task flow, content guidance, and o
 
 - `prompts/acceptance_criteria_prompt.md` — task flow and required input files.
 - `instructions/story/enhanced_story_content_guidelines.md` — content rules such as story points, business context, testable ACs, business rules, and out of scope.
-- `instructions/story/enhanced_story_jira_formatting.md` — Jira wiki-style output structure.
+- `instructions/story/enhanced_story_formatting.md` — tracker-agnostic story output structure.
+- `instructions/tracker/jira_markup_transform.md` — converts generic tags to Jira wiki markup.
+- `instructions/tracker/ado_markup_transform.md` — converts generic tags to Azure DevOps Markdown.
 
 Use project `.dmtools/config.js` to customize by repository without changing shared agent defaults:
 

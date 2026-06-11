@@ -25,10 +25,12 @@
     ],
     "cliPromptsByTracker": {
       "jira": [
-        "./agents/instructions/story/enhanced_story_jira_formatting.md"
+        "./agents/instructions/story/enhanced_story_formatting.md",
+        "./agents/instructions/tracker/jira_markup_transform.md"
       ],
       "ado": [
-        "./agents/instructions/tracker/ado_story_formatting.md"
+        "./agents/instructions/story/enhanced_story_formatting.md",
+        "./agents/instructions/tracker/ado_markup_transform.md"
       ]
     }
   }

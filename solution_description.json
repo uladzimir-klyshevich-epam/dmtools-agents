@@ -32,11 +32,11 @@
     "cliPromptsByTracker": {
       "jira": [
         "./agents/instructions/common/jira_context.md",
-        "./agents/instructions/tracker/jira_wiki_markup.md"
+        "./agents/instructions/tracker/jira_markup_transform.md"
       ],
       "ado": [
         "./agents/instructions/tracker/ado_context.md",
-        "./agents/instructions/tracker/ado_comment_format.md"
+        "./agents/instructions/tracker/ado_markup_transform.md"
       ]
     }
   }

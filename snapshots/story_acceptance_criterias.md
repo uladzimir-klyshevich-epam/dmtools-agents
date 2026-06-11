@@ -91,13 +91,13 @@ Always read these files first if present:
 
 Use the configured formatting rules to write the final output to `outputs/response.md`.
 
-**MANDATORY OUTPUT SHAPE:** The response must include `*Story Points:*`, `*Business Context:*`, `*User Story:*`, `*Acceptance Criteria:*`, `*Business Rules:*`, and `*Out of Scope:*` in that order. Do not skip Business Context, Business Rules, or Out of Scope. If a section has no confirmed details, include `- Not identified from available context.` for that section.
+**MANDATORY OUTPUT SHAPE:** The response must include `<bold>Story Points:</bold>`, `<bold>Business Context:</bold>`, `<bold>User Story:</bold>`, `<bold>Acceptance Criteria:</bold>`, `<bold>Business Rules:</bold>`, and `<bold>Out of Scope:</bold>` in that order. Do not skip Business Context, Business Rules, or Out of Scope. If a section has no confirmed details, include `<bullet> Not identified from available context.` for that section.
 
 **UI & visual quality ACs (include whenever the story touches any UI):**
-- All interactive elements (buttons, links, inputs) must have clearly visible focus and hover states with sufficient contrast.
-- Text and icon colours must meet WCAG AA contrast ratio (minimum 4.5:1 for normal text, 3:1 for large text/icons) against their background. No grey-on-white or light-on-light combinations unless contrast ratio is verified.
-- Placeholder text in inputs must be visually distinct from entered text but still readable (minimum 3:1 contrast against input background).
-- All colour and typography choices must follow the project style guide or design tokens; no ad-hoc hex values.
+<bullet> All interactive elements (buttons, links, inputs) must have clearly visible focus and hover states with sufficient contrast.
+<bullet> Text and icon colours must meet WCAG AA contrast ratio (minimum 4.5:1 for normal text, 3:1 for large text/icons) against their background. No grey-on-white or light-on-light combinations unless contrast ratio is verified.
+<bullet> Placeholder text in inputs must be visually distinct from entered text but still readable (minimum 3:1 contrast against input background).
+<bullet> All colour and typography choices must follow the project style guide or design tokens; no ad-hoc hex values.
 
 
 ---
@@ -141,21 +141,21 @@ flowchart TD
 
 ### Tracker: `jira`
 
-#### [1] `./agents/instructions/story/enhanced_story_jira_formatting.md`
+#### [1] `./agents/instructions/story/enhanced_story_formatting.md`
 
 # Enhanced Story Template Guidelines
 
-Use Jira wiki-style markdown. Section headings in bold: `*Heading:*`. No markdown checkboxes.
+Use the generic XML-style formatting tags defined in the tracker-specific markup transform file. The transform file converts tags such as `<bold>`, `<bullet>`, and `<heading2>` into the correct syntax for Jira wiki markup or Azure DevOps Markdown.
 
 ```mermaid
 flowchart TD
     subgraph SECTIONS["Required Sections (in order)"]
-        S1["*Story Points:* [1-13]"]
-        S2["*Business Context:*<br/>Why needed, problem solved, value provided"]
-        S3["*User Story:*<br/>As a [type] I want [action] So that [value]"]
-        S4["*Acceptance Criteria:*<br/>AC 1 - [Category]<br/>- [testable req 1]<br/>- [testable req 2]"]
-        S5["*Business Rules:*<br/>- [constraints, policies, validations]"]
-        S6["*Out of Scope:*<br/>- [explicitly not included]<br/>- [future enhancements]"]
+        S1["<bold>Story Points:</bold> [1-13]"]
+        S2["<bold>Business Context:</bold><br/>Why needed, problem solved, value provided"]
+        S3["<bold>User Story:</bold><br/>As a [type] I want [action] So that [value]"]
+        S4["<bold>Acceptance Criteria:</bold><br/>AC 1 - [Category]<br/><bullet> [testable req 1]<br/><bullet> [testable req 2]"]
+        S5["<bold>Business Rules:</bold><br/><bullet> [constraints, policies, validations]"]
+        S6["<bold>Out of Scope:</bold><br/><bullet> [explicitly not included]<br/><bullet> [future enhancements]"]
     end
 
     subgraph RULES["Formatting Rules"]
@@ -169,77 +169,142 @@ flowchart TD
     SECTIONS --> RULES
 ```
 
-**IMPORTANT**: Read `input/existing_questions.json` for answered questions as context. Run `dmtools jira_get_ticket KEY` for full details.
+**IMPORTANT**: Read `input/existing_questions.json` for answered questions as context. Use `dmtools` CLI commands for full ticket details.
 
-**IMPORTANT**: Check child tickets and parent story via `dmtools jira_search_by_jql` for better context.
+**IMPORTANT**: Check child tickets and parent story for better context using the appropriate `dmtools` search command.
+
+
+---
+
+#### [2] `./agents/instructions/tracker/jira_markup_transform.md`
+
+# Jira Markup Transform
+
+When writing output for Jira tracker fields or comments, transform the generic XML-style formatting tags below into Jira wiki markup. Do not write literal XML tags in the final output.
+
+| Generic tag | Jira wiki markup | Example |
+|-------------|------------------|---------|
+| `<bold>X</bold>` | `*X*` | `*Background:*` |
+| `<italic>X</italic>` | `_X_` | `_hint_` |
+| `<strike>X</strike>` | `-X-` | `-deprecated-` |
+| `<underline>X</underline>` | `+X+` | `+important+` |
+| `<code>X</code>` | `{{X}}` | `{{main.dart}}` |
+| `<codeblock>X</codeblock>` | `{code}X{code}` | `{code}void main() {}{code}` |
+| `<codeblock:lang>X</codeblock:lang>` | `{code:lang}X{code}` | `{code:dart}void main() {}{code}` |
+| `<bullet> text` | `* text` | `* Option A` |
+| `<numbered> text` | `# text` | `# Step one` |
+| `<heading1>X</heading1>` | `h1. X` | `h1. Title` |
+| `<heading2>X</heading2>` | `h2. X` | `h2. Section` |
+| `<heading3>X</heading3>` | `h3. X` | `h3. Subsection` |
+| `<link>text\|url</link>` | `[text\|url]` | `[TS-24\|https://jira.example.com/browse/TS-24]` |
+| `<image>url</image>` | `!url!` | `!https://.../diagram.png!` |
+| `<image-thumb>url</image-thumb>` | `!url\|thumbnail!` | `!https://.../diagram.png\|thumbnail!` |
+| `<quote>X</quote>` | `{quote}X{quote}` | `{quote}cited text{quote}` |
+| `<panel>X</panel>` | `{panel}X{panel}` | `{panel}note{panel}` |
+| `<color color="red">X</color>` | `{color:red}X{color}` | `{color:red}alert{color}` |
+| `<hr>` | `----` | `----` |
+
+**Rules:**
+- Replace every `<tag>...</tag>` or self-closing tag with the Jira wiki markup shown above.
+- Do NOT use Markdown syntax in Jira output: no `**bold**`, no `- item` bullets, no `# headings`, no triple backticks.
+- Use `* item` for bullets and `# item` for numbered lists.
+- For Mermaid diagrams in Jira fields that support them, wrap the diagram in `{code:mermaid}...{code}`.
+- For plain preformatted blocks, use `{noformat}...{noformat}`.
+
+**Full Jira wiki markup reference (Atlassian):**
+- `*text*` — bold
+- `_text_` — italic
+- `-text-` — strikethrough
+- `+text+` — underline
+- `^text^` — superscript
+- `~text~` — subscript
+- `{{text}}` — monospaced inline code
+- `{code}...{code}` — code block
+- `{code:java}...{code}` — language-specific code block
+- `{noformat}...{noformat}` — preformatted block
+- `[text\|url]` — link
+- `!image.png!` — embedded image
+- `h1.` ... `h6.` — headings
+- `* item` — bullet list
+- `# item` — numbered list
+- `||header||header||` / `|cell|cell|` — tables
+- `{quote}...{quote}` — block quote
+- `{panel}...{panel}` — panel
+- `{color:red}...{color}` — colored text
+- `----` — horizontal rule
 
 
 ---
 
 ### Tracker: `ado`
 
-#### [1] `./agents/instructions/tracker/ado_story_formatting.md`
+#### [1] `./agents/instructions/story/enhanced_story_formatting.md`
 
-Use GitHub-flavored Markdown exactly as shown below. Keep section headings in bold using `**Heading:**`. Use `-` for bullets.
+# Enhanced Story Template Guidelines
 
-**IMPORTANT** Read 'input/existing_questions.json' to see existing question subtasks for this story (fields: key, summary, description, status, answer). Use answered questions as context. If you need full details run: `dmtools ado_get_work_item KEY`.
+Use the generic XML-style formatting tags defined in the tracker-specific markup transform file. The transform file converts tags such as `<bold>`, `<bullet>`, and `<heading2>` into the correct syntax for Jira wiki markup or Azure DevOps Markdown.
 
-**IMPORTANT** You must check child tickets and parent story for better context using: `dmtools ado_search_by_wiql`.
+```mermaid
+flowchart TD
+    subgraph SECTIONS["Required Sections (in order)"]
+        S1["<bold>Story Points:</bold> [1-13]"]
+        S2["<bold>Business Context:</bold><br/>Why needed, problem solved, value provided"]
+        S3["<bold>User Story:</bold><br/>As a [type] I want [action] So that [value]"]
+        S4["<bold>Acceptance Criteria:</bold><br/>AC 1 - [Category]<br/><bullet> [testable req 1]<br/><bullet> [testable req 2]"]
+        S5["<bold>Business Rules:</bold><br/><bullet> [constraints, policies, validations]"]
+        S6["<bold>Out of Scope:</bold><br/><bullet> [explicitly not included]<br/><bullet> [future enhancements]"]
+    end
 
-The output must include every top-level section in this order:
-1. `**Story Points:**`
-2. `**Business Context:**`
-3. `**User Story:**`
-4. `**Acceptance Criteria:**`
-5. `**Business Rules:**`
-6. `**Out of Scope:**`
+    subgraph RULES["Formatting Rules"]
+        R1["Replace all [placeholders] with concrete content"]
+        R2["Never omit a top-level section — use 'Not identified' if empty"]
+        R3["AC numbering: AC 1, AC 2, AC 3 (NOT AC-1 — Jira Smart Link conflict)"]
+        R4["Plain bullets under each AC category"]
+        R5["No intro, conclusion, ticket key heading, or 'Acceptance Criteria for...' prefix"]
+    end
 
-**Story Points:** [1-13]
+    SECTIONS --> RULES
+```
 
-**Business Context:**
-[Why is this needed from business perspective? What problem does it solve? What value does it provide?]
+**IMPORTANT**: Read `input/existing_questions.json` for answered questions as context. Use `dmtools` CLI commands for full ticket details.
 
-**User Story:**
-As a [user type]
-I want to [action/functionality]
-So that [business value/benefit]
+**IMPORTANT**: Check child tickets and parent story for better context using the appropriate `dmtools` search command.
 
-**Acceptance Criteria:**
-AC 1 - [Category Name]
-- [Specific, testable requirement 1]
-- [Specific, testable requirement 2]
-- [Specific, testable requirement 3]
 
-AC 2 - [Category Name]
-- [Specific, testable requirement 1]
-- [Specific, testable requirement 2]
+---
 
-AC 3 - [Category Name]
-- [Specific, testable requirement 1]
-- [Specific, testable requirement 2]
+#### [2] `./agents/instructions/tracker/ado_markup_transform.md`
 
-[Continue with additional ACs as needed...]
+# ADO Markup Transform
 
-**Business Rules:**
-- [Business rule 1 - constraints, policies, regulations]
-- [Business rule 2 - system behavior requirements]
-- [Business rule 3 - data validation rules]
+When writing output for Azure DevOps tracker fields or comments, transform the generic XML-style formatting tags below into GitHub-flavored Markdown. Do not write literal XML tags in the final output.
 
-**Out of Scope:**
-- [Feature/functionality explicitly not included in this story]
-- [Future enhancements not part of current scope]
-- [Related features that require separate stories]
+| Generic tag | Markdown | Example |
+|-------------|----------|---------|
+| `<bold>X</bold>` | `**X**` | `**Background:**` |
+| `<italic>X</italic>` | `*X*` | `*hint*` |
+| `<strike>X</strike>` | `~~X~~` | `~~deprecated~~` |
+| `<underline>X</underline>` | `<u>X</u>` | `<u>important</u>` |
+| `<code>X</code>` | `` `X` `` | `` `main.dart` `` |
+| `<codeblock>X</codeblock>` | ` ```\nX\n``` ` | ` ```\nvoid main() {}\n``` ` |
+| `<codeblock:lang>X</codeblock:lang>` | ` ```lang\nX\n``` ` | ` ```dart\nvoid main() {}\n``` ` |
+| `<bullet> text` | `- text` | `- Option A` |
+| `<numbered> text` | `1. text` | `1. Step one` |
+| `<heading1>X</heading1>` | `# X` | `# Title` |
+| `<heading2>X</heading2>` | `## X` | `## Section` |
+| `<heading3>X</heading3>` | `### X` | `### Subsection` |
+| `<link>text\|url</link>` | `[text](url)` | `[TS-24](https://dev.azure.com/.../12345)` |
+| `<image>url</image>` | `![image](url)` | `![diagram](https://.../diagram.png)` |
+| `<quote>X</quote>` | `> X` | `> cited text` |
+| `<panel>X</panel>` | `> X` | `> note` |
+| `<color color="red">X</color>` | `<span style="color:red">X</span>` | `<span style="color:red">alert</span>` |
+| `<hr>` | `---` | `---` |
 
-## Formatting rules
-
-- Replace all bracketed placeholders with concrete content.
-- Do not omit any top-level section. If there is no confirmed content for a mandatory section, write a concise explicit fallback such as `- Not identified from available context.`.
-- Omit placeholder-only bullets only after replacing the section with real content or an explicit `Not identified from available context.` bullet.
-- Keep AC numbering sequential: `AC 1`, `AC 2`, `AC 3`.
-- Never write AC identifiers in the form `AC-1`, `AC-2`, etc. Always use the space-separated form `AC 1`, `AC 2`, `AC 3` instead.
-- Use plain bullets under each AC category.
-- Do not add an introduction, conclusion, ticket key heading, or "Acceptance Criteria for ..." prefix.
-- If critical information is missing, put the blocker at the top and keep any useful existing context below it.
+**Rules:**
+- Replace every `<tag>...</tag>` or self-closing tag with the Markdown shown above.
+- Do NOT use Jira wiki markup in ADO output: no `*bold*`, no `* item` bullets, no `h2.` headings, no `{code}...{code}` blocks.
+- Use `- item` for bullets and `1. item` for numbered lists.
+- For Mermaid diagrams in ADO fields that support them, wrap the diagram in ` ```mermaid\n...\n``` `.
 
 
 ---

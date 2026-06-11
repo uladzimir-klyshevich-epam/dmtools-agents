@@ -26,10 +26,10 @@
     ],
     "cliPromptsByTracker": {
       "jira": [
-        "./agents/instructions/tracker/jira_question_description_format.md"
+        "./agents/instructions/tracker/jira_markup_transform.md"
       ],
       "ado": [
-        "./agents/instructions/tracker/ado_question_description_format.md"
+        "./agents/instructions/tracker/ado_markup_transform.md"
       ]
     }
   }
