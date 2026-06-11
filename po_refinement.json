@@ -14,11 +14,13 @@
     "attachResponseAsFile": false,
     "skipAIProcessing": true,
     "alwaysPostComments": true,
+    "preCliJSAction": "agents/js/fetchParentContextToInput.js",
     "postJSAction": "agents/js/closeQuestionTicket.js",
     "inputJql": "key = JD-95",
     "cliPrompts": [
       "Experienced Product Owner and Business Analyst",
       "./agents/instructions/po_refinement/workflow.md",
+      "./agents/instructions/po_refinement/product_focus.md",
       "./agents/prompts/po_refinement_prompt.md",
       "./agents/prompts/bash_tools.md"
     ],
@@ -29,6 +31,11 @@
       "ado": [
         "./agents/instructions/tracker/ado_comment_format.md"
       ]
+    },
+    "customParams": {
+      "parentContextFetch": {
+        "enabled": true
+      }
     }
   }
 }

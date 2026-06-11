@@ -10,6 +10,7 @@
  */
 
 const { loadProjectConfig } = require('./configLoader.js');
+const { aiChat } = require('./common/aiChat.js');
 
 /**
  * Find the bug fix development comment from Jira comments.
@@ -62,7 +63,7 @@ function updateSolutionField(ticketKey, ticketDescription, comments, params) {
             (devSummary || '(not available)') + '\n\n' +
             'Write ONLY the field content — no preamble, no markdown fences.';
 
-        const solution = gemini_ai_chat(prompt);
+        const solution = aiChat(prompt);
         if (!solution || solution.trim() === '') {
             console.warn('AI returned empty solution — skipping Solution field update');
             return;

@@ -1,9 +1,17 @@
 suite('notifyBugMerged — solution field config', function() {
+    function makeAiChatMock(returnValue) {
+        return {
+            './common/aiChat.js': {
+                aiChat: function() { return returnValue; }
+            }
+        };
+    }
+
     test('uses project bugSolution field when updating RCA', function() {
         var updated = null;
         var module = loadModule(
             'js/notifyBugMerged.js',
-            makeRequire({
+            makeRequire(Object.assign({
                 './configLoader.js': {
                     loadProjectConfig: function() {
                         return {
@@ -15,13 +23,10 @@ suite('notifyBugMerged — solution field config', function() {
                         };
                     }
                 }
-            }),
+            }, makeAiChatMock('h4. Root Cause\nPolicy field mismatch.'))),
             {
                 jira_get_comments: function() {
                     return [{ body: 'Bug Fix Summary\nFixed the timeout policy.' }];
-                },
-                gemini_ai_chat: function() {
-                    return 'h4. Root Cause\nPolicy field mismatch.';
                 },
                 jira_update_field: function(args) {
                     updated = args;
@@ -51,16 +56,15 @@ suite('notifyBugMerged — solution field config', function() {
         var updated = null;
         var module = loadModule(
             'js/notifyBugMerged.js',
-            makeRequire({
+            makeRequire(Object.assign({
                 './configLoader.js': {
                     loadProjectConfig: function() {
                         return { jira: { fields: {} } };
                     }
                 }
-            }),
+            }, makeAiChatMock('RCA'))),
             {
                 jira_get_comments: function() { return []; },
-                gemini_ai_chat: function() { return 'RCA'; },
                 jira_update_field: function(args) { updated = args; },
                 jira_post_comment: function() {},
                 jira_remove_label: function() {}
