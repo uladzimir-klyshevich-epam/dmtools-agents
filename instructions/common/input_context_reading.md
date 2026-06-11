@@ -8,7 +8,9 @@ flowchart TD
         I4["4️⃣ input/TICKET/existing_questions.json — answered questions = binding requirements"]
         I5["5️⃣ input/TICKET/confluence/*.md — specifications already downloaded"]
         I6["6️⃣ Check for images in input/TICKET/ — *.png *.jpg *.gif *.svg"]
-        I0 --> I1 --> I2 --> I3 --> I4 --> I5 --> I6
+        I7["7️⃣ If present: input/TICKET/parent-KEY.md — parent story summary, description, ACs"]
+        I8["8️⃣ If present: input/TICKET/parent_context_ba.md / sa.md / vd.md — BA/SA/VD context"]
+        I0 --> I1 --> I2 --> I3 --> I4 --> I5 --> I6 --> I7 --> I8
     end
 
     subgraph CONFLUENCE_RULE["Confluence pages in input/ — READ THEM, don't re-fetch"]

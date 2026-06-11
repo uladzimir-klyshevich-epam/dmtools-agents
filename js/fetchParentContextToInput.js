@@ -234,6 +234,43 @@ function renderCommentsMarkdown(commentField) {
 }
 
 /**
+ * Fetch the parent story itself and write it to parent-{KEY}.md.
+ */
+function fetchParentStory(folder, parentKey, cfg, projectConfig, projectKey, fieldLabels) {
+    var parentFields = cfg.parentFields || cfg.fields || buildDefaultFields(projectConfig);
+    // Ensure base fields are present
+    var fetchParentFields = parentFields.slice();
+    ['key', 'summary', 'status'].forEach(function(f) {
+        if (fetchParentFields.indexOf(f) === -1) fetchParentFields.unshift(f);
+    });
+    fetchParentFields = resolveFetchFields(fetchParentFields, projectKey, fieldLabels, cfg.resolveFieldNames === true);
+
+    try {
+        var parentTicket = jira_get_ticket({ key: parentKey, fields: fetchParentFields });
+        if (!parentTicket || !parentTicket.fields) {
+            console.warn('fetchParentContextToInput: parent ticket ' + parentKey + ' returned empty fields');
+            return;
+        }
+
+        var pf = parentTicket.fields;
+        var md = '# Parent Story — ' + (pf.summary || parentKey) + '\n\n';
+        md += '**Ticket:** ' + parentKey + '\n';
+        md += '**Status:** ' + (pf.status && pf.status.name || 'Unknown') + '\n\n';
+        md += '---\n\n';
+
+        var fieldsContent = renderFieldsMarkdown(pf, fetchParentFields, fieldLabels);
+        md += fieldsContent || '_No content available._';
+        md += '\n';
+
+        var filePath = folder + '/parent-' + parentKey + '.md';
+        file_write(filePath, md);
+        console.log('✅ fetchParentContextToInput: wrote parent-' + parentKey + '.md');
+    } catch (e) {
+        console.warn('fetchParentContextToInput: failed to fetch parent story ' + parentKey + ' (non-fatal):', e.message || e);
+    }
+}
+
+/**
  * Main action — called from pre-CLI setup scripts.
  * No-op when parent context fetching is not enabled in project config or overrides.
  */
@@ -282,7 +319,7 @@ function action(params) {
         // Resolve configured options with defaults after parent is known so human-readable
         // custom fields can be resolved by project key when Jira requires customfield_* IDs.
         var jqlTemplate = cfg.jql || DEFAULT_JQL;
-        var fields      = cfg.fields || buildDefaultFields(projectConfig);
+        var siblingFields = cfg.siblingFields || cfg.fields || buildDefaultFields(projectConfig);
         var contexts    = cfg.contexts || DEFAULT_CONTEXTS;
         var fieldLabels = cfg.fieldLabels || {};
         var childQuestionsCfg = cfg.childQuestions || null;
@@ -290,14 +327,19 @@ function action(params) {
             parentKey.split('-')[0] ||
             ticketKey.split('-')[0];
 
-        // Always ensure base fields are present
-        var fetchFields = fields.slice();
+        // 2. Fetch parent story itself (unless explicitly disabled)
+        if (cfg.includeParentStory !== false) {
+            fetchParentStory(folder, parentKey, cfg, projectConfig, projectKey, fieldLabels);
+        }
+
+        // Always ensure base fields are present for sibling search
+        var fetchFields = siblingFields.slice();
         ['key', 'summary', 'status'].forEach(function(f) {
             if (fetchFields.indexOf(f) === -1) fetchFields.unshift(f);
         });
         fetchFields = resolveFetchFields(fetchFields, projectKey, fieldLabels, cfg.resolveFieldNames === true);
 
-        // 2. Run JQL with {parentKey} replaced
+        // 3. Run JQL with {parentKey} replaced
         var jql = jqlTemplate.replace(/\{parentKey\}/g, parentKey);
         console.log('fetchParentContextToInput: parent=' + parentKey + ', JQL: ' + jql);
 

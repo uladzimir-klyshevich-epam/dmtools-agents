@@ -13,6 +13,7 @@
     "skipAIProcessing": true,
     "alwaysPostComments": true,
     "preJSAction": "agents/js/checkWipLabel.js",
+    "preCliJSAction": "agents/js/fetchParentContextToInput.js",
     "postJSAction": "agents/js/enhanceSolutionDesignDescriptionAndAssess.js",
     "inputJql": "key in (JD-9)",
     "cliPrompts": [

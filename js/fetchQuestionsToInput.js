@@ -102,6 +102,14 @@ function action(params) {
     } catch (error) {
         console.error('Error in fetchQuestionsToInput:', error);
     }
+
+    // Enrich input with parent story + [BA]/[SA]/[VD] context
+    try {
+        var fetchParentContextToInput = require('./fetchParentContextToInput.js');
+        fetchParentContextToInput.action(params);
+    } catch (e) {
+        console.warn('fetchParentContextToInput failed (non-fatal):', e);
+    }
 }
 
 if (typeof module !== 'undefined' && module.exports) {
