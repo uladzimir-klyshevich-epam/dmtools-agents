@@ -111,7 +111,14 @@ function buildEncodedConfig(ticketKey, rule, effectiveConfig) {
                     // Copy arrays (e.g. cliPrompts, cliCommands) so encoded_config carries the full original list
                     p[paramKey] = value.slice();
                 } else if (typeof value === 'object' && value !== null) {
-                    // Deep copy plain objects (e.g. cliPromptsByTracker, customParams, agentParams)
+                    if (paramKey === 'cliPromptsByTracker') {
+                        // Skip copying cliPromptsByTracker as a separate object.
+                        // Tracker prompts are merged into cliPrompts by resolveInstructions
+                        // so they combine with .dmtools/config.js additions instead of
+                        // being silently dropped or overridden.
+                        return;
+                    }
+                    // Deep copy plain objects (e.g. customParams, agentParams)
                     p[paramKey] = JSON.parse(JSON.stringify(value));
                 }
             });
@@ -128,7 +135,7 @@ function buildEncodedConfig(ticketKey, rule, effectiveConfig) {
 
     if (effectiveConfig && resolvedCf) {
         var agentName = extractAgentName(resolvedCf);
-        var resolved = configLoader.resolveInstructions(agentName, null, effectiveConfig);
+        var resolved = configLoader.resolveInstructions(agentName, null, effectiveConfig, agentParamsRoot.cliPromptsByTracker);
 
         if (resolved.instructionsOverridden) {
             if (!p.agentParams) p.agentParams = {};

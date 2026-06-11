@@ -488,9 +488,10 @@ function resolveConfluenceUrls(items, config) {
  * @param {string} agentName - Agent config name (e.g., 'story_development')
  * @param {string[]} defaultInstructions - Default instructions from agent JSON
  * @param {Object} config - Loaded project config
+ * @param {Object} [agentCliPromptsByTracker] - Optional agent JSON's cliPromptsByTracker so project config extends rather than replaces it
  * @returns {Object} { instructions: string[], instructionsOverridden: boolean, additionalInstructions: string[], cliPrompts: string[], cliPrompt: string|null, agentParamPatch: Object|null, jobParamPatch: Object|null }
  */
-function resolveInstructions(agentName, defaultInstructions, config) {
+function resolveInstructions(agentName, defaultInstructions, config, agentCliPromptsByTracker) {
     var instructions = defaultInstructions || [];
     var instructionsOverridden = false;
     var additional = [];
@@ -542,19 +543,34 @@ function resolveInstructions(agentName, defaultInstructions, config) {
     if (!trackerType) {
         trackerType = 'jira';
     }
-    if (config.cliPromptsByTracker && config.cliPromptsByTracker[trackerType]) {
-        var trackerSpecific = config.cliPromptsByTracker[trackerType];
-        var trackerSpecificForAgent = null;
+
+    // Helper to extract tracker-specific prompts from a cliPromptsByTracker object
+    function extractTrackerPrompts(source) {
+        if (!source || !source[trackerType]) {
+            return null;
+        }
+        var trackerSpecific = source[trackerType];
         if (Array.isArray(trackerSpecific)) {
             // Flat structure: tracker -> array of prompts (used in agent JSON files)
-            trackerSpecificForAgent = trackerSpecific;
+            return trackerSpecific;
         } else if (trackerSpecific && typeof trackerSpecific === 'object') {
             // Nested structure: tracker -> agentName -> array of prompts (legacy / unit tests)
-            trackerSpecificForAgent = trackerSpecific[agentName];
+            return trackerSpecific[agentName];
         }
-        if (trackerSpecificForAgent && trackerSpecificForAgent.length > 0) {
-            cliPrompts = cliPrompts.concat(trackerSpecificForAgent);
-        }
+        return null;
+    }
+
+    // Merge tracker prompts from agent JSON first, then from project config.
+    // This ensures .dmtools/config.js EXTENDS the agent's base tracker prompts
+    // rather than replacing them.
+    var agentTrackerPrompts = extractTrackerPrompts(agentCliPromptsByTracker);
+    if (agentTrackerPrompts && agentTrackerPrompts.length > 0) {
+        cliPrompts = cliPrompts.concat(agentTrackerPrompts);
+    }
+
+    var configTrackerPrompts = extractTrackerPrompts(config.cliPromptsByTracker);
+    if (configTrackerPrompts && configTrackerPrompts.length > 0) {
+        cliPrompts = cliPrompts.concat(configTrackerPrompts);
     }
 
     if (config.agentParamPatches && config.agentParamPatches[agentName]) {
