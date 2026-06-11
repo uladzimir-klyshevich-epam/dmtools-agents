@@ -385,11 +385,19 @@ elif [ "$PROVIDER" = "kimi" ]; then
     KIMI_MODEL_ARGS=(--model "${KIMI_MODEL}")
   fi
 
+  # Use an isolated share dir so we can reliably locate the wire file after the
+  # run and extract token usage from it.
+  KIMI_SHARE_DIR_DEFAULT="${HOME}/.kimi"
+  KIMI_SHARE_DIR_ISOLATED="${RUNNER_TEMP:-/tmp}/kimi-share-run-$$"
+  mkdir -p "${KIMI_SHARE_DIR_ISOLATED}"
+  export KIMI_SHARE_DIR="${KIMI_SHARE_DIR_ISOLATED}"
+
   # Always use -p (non-interactive prompt mode) when stdin is not a TTY (CI).
   # Stdin mode causes kimi to enter interactive TUI which hangs/does nothing in CI.
   # For local interactive use, stdin is fine but -p is still preferred for reliability.
   kimi_log="$(mktemp)"
   echo "Running: kimi ${KIMI_MODEL_ARGS[*]:-} ${PASS_ARGS[*]:-} -p <prompt:${PROMPT_BYTES} bytes>"
+  echo "  KIMI_SHARE_DIR: ${KIMI_SHARE_DIR}"
   echo ""
   set +e
   kimi ${KIMI_MODEL_ARGS[@]+"${KIMI_MODEL_ARGS[@]}"} ${PASS_ARGS[@]+"${PASS_ARGS[@]}"} --output-format "stream-json" -p "${PROMPT}" 2>&1 | tee "$kimi_log"
@@ -398,6 +406,76 @@ elif [ "$PROVIDER" = "kimi" ]; then
 
   record_codegraph_usage "$kimi_log"
   rm -f "$kimi_log"
+
+  # Extract token usage from the wire file Kimi CLI wrote during the run.
+  # Wire file location: $KIMI_SHARE_DIR/sessions/<work-dir-hash>/<session-id>/agents/main/wire.jsonl
+  print_kimi_usage_summary() {
+    local share_dir="$1"
+    local wire_file
+    wire_file="$(find "${share_dir}/sessions" -name "wire.jsonl" -type f 2>/dev/null | head -1)"
+    if [ -z "${wire_file}" ] || [ ! -f "${wire_file}" ]; then
+      echo "⚠️  No Kimi wire file found; cannot report token usage."
+      return 0
+    fi
+
+    python3 - "$wire_file" << 'PYEOF'
+import json
+import sys
+
+wire_file = sys.argv[1]
+
+total_input_other = 0
+total_output = 0
+total_input_cache_read = 0
+total_input_cache_creation = 0
+count = 0
+models = set()
+
+with open(wire_file, 'r', encoding='utf-8') as f:
+    for line in f:
+        if '"type":"usage.record"' not in line:
+            continue
+        try:
+            obj = json.loads(line)
+            if obj.get('type') != 'usage.record':
+                continue
+            usage = obj.get('usage', {})
+            total_input_other += usage.get('inputOther', 0)
+            total_output += usage.get('output', 0)
+            total_input_cache_read += usage.get('inputCacheRead', 0)
+            total_input_cache_creation += usage.get('inputCacheCreation', 0)
+            models.add(obj.get('model', 'unknown'))
+            count += 1
+        except Exception:
+            continue
+
+if count == 0:
+    print("⚠️  Kimi wire file found but no usage records.")
+    sys.exit(0)
+
+total_input = total_input_other + total_input_cache_read + total_input_cache_creation
+total = total_input + total_output
+
+print("")
+print("=== Kimi Token Usage Summary ===")
+print(f"  Model(s): {', '.join(sorted(models))}")
+print(f"  Usage records: {count}")
+print(f"  Input (other):          {total_input_other:,}")
+print(f"  Input (cache read):     {total_input_cache_read:,}")
+print(f"  Input (cache creation): {total_input_cache_creation:,}")
+print(f"  Output:                 {total_output:,}")
+print(f"  Total input:            {total_input:,}")
+print(f"  Total tokens:           {total:,}")
+print("================================")
+PYEOF
+  }
+
+  print_kimi_usage_summary "${KIMI_SHARE_DIR}"
+
+  # Clean up the isolated share dir to avoid leaking disk space in CI.
+  rm -rf "${KIMI_SHARE_DIR_ISOLATED}"
+  # Restore default only if we exported it; otherwise leave env as-is.
+  export KIMI_SHARE_DIR="${KIMI_SHARE_DIR_DEFAULT}"
 
   echo ""
   echo "=== Agent completed with exit code: $exit_code ==="
