@@ -178,6 +178,34 @@ function resolveFetchFields(fields, projectKey, fieldLabels, shouldResolve) {
 }
 
 /**
+ * Find a field value in dmtools-returned fields object.
+ * DMTools returns custom fields as "Label (customfield_ID)" keys,
+ * so we need to match by suffix or exact name.
+ */
+function findFieldValue(fields, fieldName) {
+    if (!fields || !fieldName) return undefined;
+    // Exact match first
+    if (fieldName in fields) return fields[fieldName];
+    // Match by suffix "(fieldName)" — dmtools format: "Label (customfield_12345)"
+    var suffix = '(' + fieldName + ')';
+    var keys = Object.keys(fields);
+    for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        if (k.indexOf(suffix) > -1) return fields[k];
+    }
+    return undefined;
+}
+
+/**
+ * Extract human-readable label from dmtools field key.
+ * "Acceptance Criteria (customfield_10397)" → "Acceptance Criteria"
+ */
+function extractFieldLabel(fieldKey) {
+    var match = fieldKey.match(/^(.+?)\s*\(customfield_\d+\)$/);
+    return match ? match[1].trim() : fieldKey;
+}
+
+/**
  * Render all fetched fields of a ticket into a markdown section.
  * Fields from the JQL search result + optionally the full ticket re-fetch.
  * @param {Object} fields       - ticket fields object
@@ -191,7 +219,7 @@ function renderFieldsMarkdown(fields, configFields, fieldLabels) {
     for (var i = 0; i < configFields.length; i++) {
         var fieldName = configFields[i];
         if (skip[fieldName]) continue;
-        var val = fields[fieldName];
+        var val = findFieldValue(fields, fieldName);
         if (val === undefined || val === null || val === '') continue;
 
         // Special rendering for Jira comment field
@@ -202,8 +230,8 @@ function renderFieldsMarkdown(fields, configFields, fieldLabels) {
         }
 
         var displayVal = (typeof val === 'object') ? JSON.stringify(val, null, 2) : String(val);
-        // Use provided label, else strip customfield_ prefix for readability
-        var displayName = labels[fieldName] || fieldName.replace(/^customfield_\d+$/, fieldName);
+        // Use provided label, else extract from dmtools key format, else strip customfield_ prefix
+        var displayName = labels[fieldName] || extractFieldLabel(fieldName);
         lines.push('**' + displayName + ':**\n\n' + displayVal);
     }
     return lines.join('\n\n');
@@ -367,7 +395,7 @@ function action(params) {
                 // Re-fetch full ticket if any requested field is missing in search result
                 var needsFullFetch = fetchFields.some(function(f) {
                     if (f === 'key') return false; // key lives on the issue object, not fields
-                    return !(f in itemFields) || itemFields[f] === undefined;
+                    return findFieldValue(itemFields, f) === undefined;
                 });
                 if (needsFullFetch) {
                     try {

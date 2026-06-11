@@ -19,6 +19,7 @@
     "cliPrompts": [
       "Senior Software Architect",
       "./agents/instructions/solution_description/workflow.md",
+      "./agents/instructions/common/input_context_reading.md",
       "./agents/instructions/common/response_output.md",
       "./agents/instructions/common/no_development.md",
       "./agents/instructions/common/error_handling.md",

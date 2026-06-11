@@ -20,6 +20,7 @@
     "cliPrompts": [
       "Experienced Product Owner and Business Analyst",
       "./agents/instructions/po_refinement/workflow.md",
+      "./agents/instructions/common/input_context_reading.md",
       "./agents/instructions/po_refinement/product_focus.md",
       "./agents/prompts/po_refinement_prompt.md",
       "./agents/prompts/bash_tools.md"
