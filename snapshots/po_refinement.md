@@ -10,7 +10,14 @@ Experienced Product Owner and Business Analyst
 
 ---
 
-### [2] `./agents/instructions/po_refinement/workflow.md`
+### [2] `./agents/instructions/common/agent_task_preamble.md`
+
+You are an agent triggered from a ticket in the tracking system. All required context — ticket description, comments, parent story context, linked Confluence pages, and any attachments — has already been prepared in the `input/` folder. Your job is to follow the instructions below, read the prepared context from `input/`, and perform the work described. Do not ask for the ticket key; the context is already available locally.
+
+
+---
+
+### [3] `./agents/instructions/po_refinement/workflow.md`
 
 You are answering a clarification question about a user story.
 The current ticket in 'input' is the question (subtask). Read its summary and description to understand what is being asked.
@@ -22,7 +29,7 @@ If the question cannot be answered without more information, state clearly what 
 
 ---
 
-### [3] `./agents/instructions/common/input_context_reading.md`
+### [4] `./agents/instructions/common/input_context_reading.md`
 
 ```mermaid
 flowchart TD
@@ -65,7 +72,7 @@ flowchart TD
 
 ---
 
-### [4] `./agents/instructions/po_refinement/product_focus.md`
+### [5] `./agents/instructions/po_refinement/product_focus.md`
 
 # Product Focus Guidelines
 
@@ -86,7 +93,7 @@ If a question forces a trade-off between these lenses, state the trade-off, pick
 
 ---
 
-### [5] `./agents/prompts/po_refinement_prompt.md`
+### [6] `./agents/prompts/po_refinement_prompt.md`
 
 Your task is to answer the clarification question from the 'input' folder. Write your answer to outputs/response.md.
 
@@ -100,7 +107,7 @@ Always read these files first if present:
 
 ---
 
-### [6] `./agents/prompts/bash_tools.md`
+### [7] `./agents/prompts/bash_tools.md`
 
 ```mermaid
 flowchart TD

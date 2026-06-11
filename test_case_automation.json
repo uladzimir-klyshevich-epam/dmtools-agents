@@ -25,6 +25,7 @@
     "inputJql": "key = JD-111",
     "cliPrompts": [
       "Senior QA Automation Engineer",
+      "./agents/instructions/common/agent_task_preamble.md",
       "./agents/instructions/common/coding_guidelines.md",
       "./agents/instructions/common/input_context_reading.md",
       "./agents/instructions/test_case_automation/general_guidelines.md",

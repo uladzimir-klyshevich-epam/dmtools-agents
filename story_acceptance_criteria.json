@@ -17,6 +17,7 @@
     "inputJql": "key = JD-82",
     "cliPrompts": [
       "Experienced Business Analyst",
+      "./agents/instructions/common/agent_task_preamble.md",
       "./agents/instructions/story_acceptance_criteria/workflow.md",
       "./agents/instructions/common/media_handling.md",
       "./agents/instructions/story/enhanced_story_content_guidelines.md",

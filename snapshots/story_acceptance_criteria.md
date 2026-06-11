@@ -10,7 +10,14 @@ Experienced Business Analyst
 
 ---
 
-### [2] `./agents/instructions/story_acceptance_criteria/workflow.md`
+### [2] `./agents/instructions/common/agent_task_preamble.md`
+
+You are an agent triggered from a ticket in the tracking system. All required context — ticket description, comments, parent story context, linked Confluence pages, and any attachments — has already been prepared in the `input/` folder. Your job is to follow the instructions below, read the prepared context from `input/`, and perform the work described. Do not ask for the ticket key; the context is already available locally.
+
+
+---
+
+### [3] `./agents/instructions/story_acceptance_criteria/workflow.md`
 
 You must write response to the request to outputs/response.md according to formatting rules
 Don't write Acceptance Criteria for TICKET-XXX, just start from the content.
@@ -23,7 +30,7 @@ if you did not understand the task, or you can't finish it with right quality **
 
 ---
 
-### [3] `./agents/instructions/common/media_handling.md`
+### [4] `./agents/instructions/common/media_handling.md`
 
 Images and attachments are pre-downloaded to the input folder. Read them directly — no extra API call is needed.
 
@@ -37,7 +44,7 @@ EOF
 
 ---
 
-### [4] `./agents/instructions/story/enhanced_story_content_guidelines.md`
+### [5] `./agents/instructions/story/enhanced_story_content_guidelines.md`
 
 # Enhanced Story Content Guidelines
 
@@ -79,7 +86,7 @@ flowchart TD
 
 ---
 
-### [5] `./agents/prompts/acceptance_criteria_prompt.md`
+### [6] `./agents/prompts/acceptance_criteria_prompt.md`
 
 **IMPORTANT** Your task is to write an enhanced story-ready Acceptance Criteria field using the configured formatting rules. User request is in the `input` folder; read all files there and do what is requested.
 
@@ -102,7 +109,7 @@ Use the configured formatting rules to write the final output to `outputs/respon
 
 ---
 
-### [6] `./agents/prompts/bash_tools.md`
+### [7] `./agents/prompts/bash_tools.md`
 
 ```mermaid
 flowchart TD

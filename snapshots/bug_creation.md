@@ -10,7 +10,14 @@ QA Engineer
 
 ---
 
-### [2] `./agents/instructions/bug_creation/workflow.md`
+### [2] `./agents/instructions/common/agent_task_preamble.md`
+
+You are an agent triggered from a ticket in the tracking system. All required context — ticket description, comments, parent story context, linked Confluence pages, and any attachments — has already been prepared in the `input/` folder. Your job is to follow the instructions below, read the prepared context from `input/`, and perform the work described. Do not ask for the ticket key; the context is already available locally.
+
+
+---
+
+### [3] `./agents/instructions/bug_creation/workflow.md`
 
 Read all Bug *.md files in the input folder to check for duplicates before creating a new bug.
 If a matching open bug is found — link it. Do NOT create a duplicate.
@@ -20,14 +27,14 @@ If action is 'create', also write outputs/bug_description.md in tracker Markdown
 
 ---
 
-### [3] `./agents/instructions/bug_creation/formatting_rules.md`
+### [4] `./agents/instructions/bug_creation/formatting_rules.md`
 
 outputs/bug_decision.json must be valid JSON. 'action' must be one of: 'link', 'create', 'none', 'tests_pass'.
 
 
 ---
 
-### [4] `./agents/prompts/bug_creation_prompt.md`
+### [5] `./agents/prompts/bug_creation_prompt.md`
 
 You are a QA Engineer analyzing a failed Test Case to determine if a bug already exists or needs to be created.
 
@@ -129,7 +136,7 @@ If action is `create`, also write `outputs/bug_description.md` with a clear bug 
 
 ---
 
-### [5] `./agents/prompts/bash_tools.md`
+### [6] `./agents/prompts/bash_tools.md`
 
 ```mermaid
 flowchart TD

@@ -19,6 +19,7 @@
     "inputJql": "key = JD-95",
     "cliPrompts": [
       "Experienced Product Owner and Business Analyst",
+      "./agents/instructions/common/agent_task_preamble.md",
       "./agents/instructions/po_refinement/workflow.md",
       "./agents/instructions/common/input_context_reading.md",
       "./agents/instructions/po_refinement/product_focus.md",

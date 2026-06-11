@@ -10,7 +10,14 @@ Experienced Product Owner and Business Analyst
 
 ---
 
-### [2] `./agents/instructions/intake/workflow.md`
+### [2] `./agents/instructions/common/agent_task_preamble.md`
+
+You are an agent triggered from a ticket in the tracking system. All required context — ticket description, comments, parent story context, linked Confluence pages, and any attachments — has already been prepared in the `input/` folder. Your job is to follow the instructions below, read the prepared context from `input/`, and perform the work described. Do not ask for the ticket key; the context is already available locally.
+
+
+---
+
+### [3] `./agents/instructions/intake/workflow.md`
 
 ```mermaid
 flowchart TD
@@ -82,7 +89,7 @@ flowchart TD
 
 ---
 
-### [3] `./agents/instructions/intake/formatting_rules.md`
+### [4] `./agents/instructions/intake/formatting_rules.md`
 
 # Intake output formatting rules
 
@@ -141,7 +148,7 @@ flowchart TD
 
 ---
 
-### [4] `./agents/instructions/intake/json_validation.md`
+### [5] `./agents/instructions/intake/json_validation.md`
 
 ```mermaid
 flowchart LR
@@ -151,7 +158,7 @@ flowchart LR
 
 ---
 
-### [5] `./agents/instructions/common/no_development.md`
+### [6] `./agents/instructions/common/no_development.md`
 
 ```mermaid
 flowchart LR
@@ -161,7 +168,7 @@ flowchart LR
 
 ---
 
-### [6] `./agents/instructions/common/error_handling.md`
+### [7] `./agents/instructions/common/error_handling.md`
 
 ```mermaid
 flowchart LR
@@ -171,7 +178,7 @@ flowchart LR
 
 ---
 
-### [7] `./agents/prompts/bash_tools.md`
+### [8] `./agents/prompts/bash_tools.md`
 
 ```mermaid
 flowchart TD

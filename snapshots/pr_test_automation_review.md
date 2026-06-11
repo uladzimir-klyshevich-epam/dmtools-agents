@@ -10,7 +10,14 @@ Senior QA Engineer & Code Reviewer
 
 ---
 
-### [2] `./agents/instructions/common/coding_guidelines.md`
+### [2] `./agents/instructions/common/agent_task_preamble.md`
+
+You are an agent triggered from a ticket in the tracking system. All required context — ticket description, comments, parent story context, linked Confluence pages, and any attachments — has already been prepared in the `input/` folder. Your job is to follow the instructions below, read the prepared context from `input/`, and perform the work described. Do not ask for the ticket key; the context is already available locally.
+
+
+---
+
+### [3] `./agents/instructions/common/coding_guidelines.md`
 
 ```mermaid
 flowchart TD
@@ -26,7 +33,7 @@ flowchart TD
 
 ---
 
-### [3] `./agents/instructions/common/input_context_reading.md`
+### [4] `./agents/instructions/common/input_context_reading.md`
 
 ```mermaid
 flowchart TD
@@ -69,7 +76,7 @@ flowchart TD
 
 ---
 
-### [4] `./agents/instructions/pr_test_automation_review/general_guidelines.md`
+### [5] `./agents/instructions/pr_test_automation_review/general_guidelines.md`
 
 ```mermaid
 flowchart TD
@@ -95,7 +102,7 @@ flowchart TD
 
 ---
 
-### [5] `./agents/instructions/pr_test_automation_review/output_rules.md`
+### [6] `./agents/instructions/pr_test_automation_review/output_rules.md`
 
 ```mermaid
 flowchart TD
@@ -111,7 +118,7 @@ flowchart TD
 
 ---
 
-### [6] `./agents/instructions/pr_test_automation_review/formatting_rules.md`
+### [7] `./agents/instructions/pr_test_automation_review/formatting_rules.md`
 
 ```mermaid
 flowchart TD
@@ -128,7 +135,7 @@ flowchart TD
 
 ---
 
-### [7] `./agents/instructions/pr_test_automation_review/few_shots.md`
+### [8] `./agents/instructions/pr_test_automation_review/few_shots.md`
 
 Example PR test automation review outputs — keep concise:
 
@@ -163,7 +170,7 @@ Example PR test automation review outputs — keep concise:
 
 ---
 
-### [8] `./agents/instructions/common/dmtools_cli.md`
+### [9] `./agents/instructions/common/dmtools_cli.md`
 
 ## DMTools CLI — External Data Access
 
@@ -199,7 +206,7 @@ flowchart TD
 
 ---
 
-### [9] `./agents/prompts/bash_tools.md`
+### [10] `./agents/prompts/bash_tools.md`
 
 ```mermaid
 flowchart TD

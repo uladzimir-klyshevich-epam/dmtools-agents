@@ -10,7 +10,14 @@ Senior Software Architect
 
 ---
 
-### [2] `./agents/instructions/solution_description/workflow.md`
+### [2] `./agents/instructions/common/agent_task_preamble.md`
+
+You are an agent triggered from a ticket in the tracking system. All required context — ticket description, comments, parent story context, linked Confluence pages, and any attachments — has already been prepared in the `input/` folder. Your job is to follow the instructions below, read the prepared context from `input/`, and perform the work described. Do not ask for the ticket key; the context is already available locally.
+
+
+---
+
+### [3] `./agents/instructions/solution_description/workflow.md`
 
 **IMPORTANT** your role is to enhance solution design ticket description with comprehensive technical details!
 **IMPORTANT** Implementation details is out of scope here. Focus on highlevel solution design
@@ -25,7 +32,7 @@ Content from the response.md and diagram.md files will be used for automated des
 
 ---
 
-### [3] `./agents/instructions/common/input_context_reading.md`
+### [4] `./agents/instructions/common/input_context_reading.md`
 
 ```mermaid
 flowchart TD
@@ -68,7 +75,7 @@ flowchart TD
 
 ---
 
-### [4] `./agents/instructions/common/response_output.md`
+### [5] `./agents/instructions/common/response_output.md`
 
 **IMPORTANT** You must write response to the request to outputs/response.md according to formatting rules
 
@@ -76,7 +83,7 @@ flowchart TD
 
 ---
 
-### [5] `./agents/instructions/common/no_development.md`
+### [6] `./agents/instructions/common/no_development.md`
 
 ```mermaid
 flowchart LR
@@ -86,7 +93,7 @@ flowchart LR
 
 ---
 
-### [6] `./agents/instructions/common/error_handling.md`
+### [7] `./agents/instructions/common/error_handling.md`
 
 ```mermaid
 flowchart LR
@@ -96,7 +103,7 @@ flowchart LR
 
 ---
 
-### [7] `./agents/instructions/common/preserve_references.md`
+### [8] `./agents/instructions/common/preserve_references.md`
 
 **IMPORTANT** You must keep exact syntax and references to attachments if there are any in description of the ticket. Especially if we need it in future. If you remove reference from description we lose attachments. For instance, if initial description has !image-20250923-195553.png|width=763,alt="image-20250923-195553.png"!, it must be presented in new description as well.
 
@@ -108,7 +115,7 @@ flowchart LR
 
 ---
 
-### [8] `./agents/instructions/common/media_handling.md`
+### [9] `./agents/instructions/common/media_handling.md`
 
 Images and attachments are pre-downloaded to the input folder. Read them directly — no extra API call is needed.
 
@@ -122,7 +129,7 @@ EOF
 
 ---
 
-### [9] `./agents/instructions/enhancement/solution_design_formatting_rules.md`
+### [10] `./agents/instructions/enhancement/solution_design_formatting_rules.md`
 
 **IMPORTANT** Write the enhanced SD CORE technical description using the generic markup tags from the tracker-specific transform file to outputs/response.md. The transform file converts tags such as `<bold>`, `<bullet>`, `<code>`, and `<link>` into the correct Jira wiki markup or Azure DevOps Markdown syntax.
 **IMPORTANT** Write the valid Mermaid diagram syntax to outputs/diagram.md
@@ -130,7 +137,7 @@ EOF
 
 ---
 
-### [10] `./agents/instructions/enhancement/solution_design_few_shots.md`
+### [11] `./agents/instructions/enhancement/solution_design_few_shots.md`
 
 **Example content for outputs/response.md:**
 
@@ -160,7 +167,7 @@ graph TD
 
 ---
 
-### [11] `./agents/prompts/bash_tools.md`
+### [12] `./agents/prompts/bash_tools.md`
 
 ```mermaid
 flowchart TD

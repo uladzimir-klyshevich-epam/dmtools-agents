@@ -18,6 +18,7 @@
     "inputJql": "key in (JD-9)",
     "cliPrompts": [
       "Senior Software Architect",
+      "./agents/instructions/common/agent_task_preamble.md",
       "./agents/instructions/solution_description/workflow.md",
       "./agents/instructions/common/input_context_reading.md",
       "./agents/instructions/common/response_output.md",

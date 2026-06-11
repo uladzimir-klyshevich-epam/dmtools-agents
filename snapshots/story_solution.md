@@ -10,7 +10,14 @@ Senior Software Architect
 
 ---
 
-### [2] `./agents/instructions/story_solution/workflow.md`
+### [2] `./agents/instructions/common/agent_task_preamble.md`
+
+You are an agent triggered from a ticket in the tracking system. All required context — ticket description, comments, parent story context, linked Confluence pages, and any attachments — has already been prepared in the `input/` folder. Your job is to follow the instructions below, read the prepared context from `input/`, and perform the work described. Do not ask for the ticket key; the context is already available locally.
+
+
+---
+
+### [3] `./agents/instructions/story_solution/workflow.md`
 
 **IMPORTANT** Read 'input/existing_questions.json' to see existing question subtasks for this story (fields: key, summary, description, status, answer). Use answered questions as context for the solution.
 **IMPORTANT** Your task is to write a high-level Solution Design for the story — not implementation details. Focus on architecture, components, data flow, and integration points.
@@ -23,7 +30,7 @@ Senior Software Architect
 
 ---
 
-### [3] `./agents/instructions/common/no_development.md`
+### [4] `./agents/instructions/common/no_development.md`
 
 ```mermaid
 flowchart LR
@@ -33,7 +40,7 @@ flowchart LR
 
 ---
 
-### [4] `./agents/instructions/common/error_handling.md`
+### [5] `./agents/instructions/common/error_handling.md`
 
 ```mermaid
 flowchart LR
@@ -43,7 +50,7 @@ flowchart LR
 
 ---
 
-### [5] `./agents/instructions/common/media_handling.md`
+### [6] `./agents/instructions/common/media_handling.md`
 
 Images and attachments are pre-downloaded to the input folder. Read them directly — no extra API call is needed.
 
@@ -57,7 +64,7 @@ EOF
 
 ---
 
-### [6] `./agents/instructions/enhancement/solution_design_ac_referencing.md`
+### [7] `./agents/instructions/enhancement/solution_design_ac_referencing.md`
 
 # AC Referencing Rules for Solution Design
 
@@ -79,7 +86,7 @@ Read parent context files in the input folder if present:
 
 ---
 
-### [7] `./agents/instructions/enhancement/solution_design_formatting_rules.md`
+### [8] `./agents/instructions/enhancement/solution_design_formatting_rules.md`
 
 **IMPORTANT** Write the enhanced SD CORE technical description using the generic markup tags from the tracker-specific transform file to outputs/response.md. The transform file converts tags such as `<bold>`, `<bullet>`, `<code>`, and `<link>` into the correct Jira wiki markup or Azure DevOps Markdown syntax.
 **IMPORTANT** Write the valid Mermaid diagram syntax to outputs/diagram.md
@@ -87,7 +94,7 @@ Read parent context files in the input folder if present:
 
 ---
 
-### [8] `./agents/instructions/enhancement/solution_design_few_shots.md`
+### [9] `./agents/instructions/enhancement/solution_design_few_shots.md`
 
 **Example content for outputs/response.md:**
 
@@ -117,7 +124,7 @@ graph TD
 
 ---
 
-### [9] `./agents/prompts/story_solution_prompt.md`
+### [10] `./agents/prompts/story_solution_prompt.md`
 
 User request is in 'input' folder, read all files there and do what is requested. Follow instructions from input.
 
@@ -157,7 +164,7 @@ List the input folder with `ls -la input/*/` and read every file found:
 
 ---
 
-### [10] `./agents/prompts/bash_tools.md`
+### [11] `./agents/prompts/bash_tools.md`
 
 ```mermaid
 flowchart TD

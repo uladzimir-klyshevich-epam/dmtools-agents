@@ -23,6 +23,7 @@
     "inputJql": "key = JD-111",
     "cliPrompts": [
       "QA Engineer",
+      "./agents/instructions/common/agent_task_preamble.md",
       "./agents/instructions/bug_creation/workflow.md",
       "./agents/instructions/bug_creation/formatting_rules.md",
       "./agents/prompts/bug_creation_prompt.md",

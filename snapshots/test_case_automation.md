@@ -10,7 +10,14 @@ Senior QA Automation Engineer
 
 ---
 
-### [2] `./agents/instructions/common/coding_guidelines.md`
+### [2] `./agents/instructions/common/agent_task_preamble.md`
+
+You are an agent triggered from a ticket in the tracking system. All required context — ticket description, comments, parent story context, linked Confluence pages, and any attachments — has already been prepared in the `input/` folder. Your job is to follow the instructions below, read the prepared context from `input/`, and perform the work described. Do not ask for the ticket key; the context is already available locally.
+
+
+---
+
+### [3] `./agents/instructions/common/coding_guidelines.md`
 
 ```mermaid
 flowchart TD
@@ -26,7 +33,7 @@ flowchart TD
 
 ---
 
-### [3] `./agents/instructions/common/input_context_reading.md`
+### [4] `./agents/instructions/common/input_context_reading.md`
 
 ```mermaid
 flowchart TD
@@ -69,7 +76,7 @@ flowchart TD
 
 ---
 
-### [4] `./agents/instructions/test_case_automation/general_guidelines.md`
+### [5] `./agents/instructions/test_case_automation/general_guidelines.md`
 
 ```mermaid
 flowchart TD
@@ -99,7 +106,7 @@ flowchart TD
 
 ---
 
-### [5] `./agents/instructions/test_case_automation/formatting_rules.md`
+### [6] `./agents/instructions/test_case_automation/formatting_rules.md`
 
 ```mermaid
 flowchart TD
@@ -113,7 +120,7 @@ flowchart TD
 
 ---
 
-### [6] `./agents/instructions/test_automation/test_automation_architecture.md`
+### [7] `./agents/instructions/test_automation/test_automation_architecture.md`
 
 # Test Automation Architecture
 
@@ -253,7 +260,7 @@ flowchart TD
 
 ---
 
-### [7] `./agents/instructions/test_automation/test_automation_instructions.md`
+### [8] `./agents/instructions/test_automation/test_automation_instructions.md`
 
 # Test Automation Instructions
 
@@ -371,7 +378,7 @@ If test **failed**, also write `outputs/bug_description.md` with reproduction st
 
 ---
 
-### [8] `./agents/instructions/test_automation/test_automation_output_files.md`
+### [9] `./agents/instructions/test_automation/test_automation_output_files.md`
 
 # Test Automation Output Files
 
@@ -457,7 +464,7 @@ Write the structured status JSON exactly as described in `agents/instructions/te
 
 ---
 
-### [9] `./agents/instructions/test_automation/test_automation_json_output.md`
+### [10] `./agents/instructions/test_automation/test_automation_json_output.md`
 
 # Test Automation JSON Output Format
 
@@ -555,7 +562,7 @@ Use tracker-specific format:
 
 ---
 
-### [10] `./agents/prompts/test_case_automation_prompt.md`
+### [11] `./agents/prompts/test_case_automation_prompt.md`
 
 **CRITICAL — linked bugs**: If `linked_bugs.md` is present in the input folder, read it carefully before writing any test.
 - Read the **Solution** field and **AI Fix Comments** for each bug.
@@ -614,7 +621,7 @@ Do NOT create branches or push. Do NOT modify any code outside `testing/`.
 
 ---
 
-### [11] `./agents/prompts/bash_tools.md`
+### [12] `./agents/prompts/bash_tools.md`
 
 ```mermaid
 flowchart TD
@@ -649,7 +656,7 @@ flowchart TD
 
 ---
 
-### [12] `./agents/instructions/common/dmtools_cli.md`
+### [13] `./agents/instructions/common/dmtools_cli.md`
 
 ## DMTools CLI — External Data Access
 

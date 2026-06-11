@@ -22,6 +22,7 @@
     "inputJql": "project = JD AND issuetype = 'Test Case' AND status = 'In Rework'",
     "cliPrompts": [
       "Senior QA Automation Engineer focused on test code fixes",
+      "./agents/instructions/common/agent_task_preamble.md",
       "./agents/instructions/common/coding_guidelines.md",
       "./agents/instructions/common/input_context_reading.md",
       "./agents/instructions/pr_test_automation_rework/general_guidelines.md",

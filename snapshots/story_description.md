@@ -10,7 +10,14 @@ Experienced Business Analyst
 
 ---
 
-### [2] `./agents/instructions/story_description/workflow.md`
+### [2] `./agents/instructions/common/agent_task_preamble.md`
+
+You are an agent triggered from a ticket in the tracking system. All required context — ticket description, comments, parent story context, linked Confluence pages, and any attachments — has already been prepared in the `input/` folder. Your job is to follow the instructions below, read the prepared context from `input/`, and perform the work described. Do not ask for the ticket key; the context is already available locally.
+
+
+---
+
+### [3] `./agents/instructions/story_description/workflow.md`
 
 You must write response to the request to outputs/response.md according to formatting rules
 Don't write Enhanced Story Description of TICKET-XXX, just start from the content.
@@ -24,7 +31,7 @@ if you did not understand the task, or you can't finish it with right quality or
 
 ---
 
-### [3] `./agents/instructions/common/media_handling.md`
+### [4] `./agents/instructions/common/media_handling.md`
 
 Images and attachments are pre-downloaded to the input folder. Read them directly — no extra API call is needed.
 
@@ -38,7 +45,7 @@ EOF
 
 ---
 
-### [4] `./agents/prompts/story_description_prompt.md`
+### [5] `./agents/prompts/story_description_prompt.md`
 
 Your task is to write a story description. Write your output to `outputs/response.md`. Read all files in the 'input' folder.
 
@@ -64,7 +71,7 @@ List the input folder with `ls -la input/*/` and read every file found:
 
 ---
 
-### [5] `./agents/prompts/bash_tools.md`
+### [6] `./agents/prompts/bash_tools.md`
 
 ```mermaid
 flowchart TD
