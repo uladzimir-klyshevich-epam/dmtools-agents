@@ -48,20 +48,25 @@ run_kimi() {
   local kimi_has_resume_arg=false
   local kimi_has_session_arg=false
   local pass_arg
-  for pass_arg in "${PASS_ARGS[@]:-}"; do
-    case "$pass_arg" in
-      --continue|--resume|--resume=*)
-        kimi_has_resume_arg=true
-        ;;
-      --session|--session=*|-S|-S=*)
-        kimi_has_session_arg=true
-        ;;
-    esac
-  done
+  if [ "${#PASS_ARGS[@]}" -gt 0 ]; then
+    for pass_arg in "${PASS_ARGS[@]}"; do
+      case "$pass_arg" in
+        --continue|--resume|--resume=*)
+          kimi_has_resume_arg=true
+          ;;
+        --session|--session=*|-S|-S=*)
+          kimi_has_session_arg=true
+          ;;
+      esac
+    done
+  fi
 
   local kimi_session_id="${KIMI_SESSION_ID:-}"
   local kimi_session_args=()
-  local kimi_pass_args=("${PASS_ARGS[@]:-}")
+  local kimi_pass_args=()
+  if [ "${#PASS_ARGS[@]}" -gt 0 ]; then
+    kimi_pass_args=("${PASS_ARGS[@]}")
+  fi
 
   if [ "${kimi_has_resume_arg}" = "true" ] && [ "${kimi_has_session_arg}" = "false" ]; then
     if [ -z "${kimi_session_id}" ] && [ -f "outputs/kimi_session_id.txt" ]; then
@@ -76,12 +81,14 @@ run_kimi() {
     kimi_session_args=(--session "${kimi_session_id}")
     # Drop --continue/--resume flags; keep any other pass-through args.
     kimi_pass_args=()
-    for pass_arg in "${PASS_ARGS[@]:-}"; do
-      case "$pass_arg" in
-        --continue|--resume|--resume=*) ;;
-        *) kimi_pass_args+=("$pass_arg") ;;
-      esac
-    done
+    if [ "${#PASS_ARGS[@]}" -gt 0 ]; then
+      for pass_arg in "${PASS_ARGS[@]}"; do
+        case "$pass_arg" in
+          --continue|--resume|--resume=*) ;;
+          *) kimi_pass_args+=("$pass_arg") ;;
+        esac
+      done
+    fi
   fi
 
   # Always use -p (non-interactive prompt mode) when stdin is not a TTY (CI).
