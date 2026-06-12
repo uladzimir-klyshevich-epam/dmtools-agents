@@ -700,37 +700,18 @@ function action(params) {
         }
         console.log('Using branch:', branchName);
 
-        // Prepare commit message
+        // Prepare commit message and PR target
         const commitMessage = configLoader.formatTemplate(config.formats.commitMessage.development, {ticketKey: ticketKey, ticketSummary: ticketSummary});
-
-        var gateResult = feedbackLoop.runQualityGates({
-            ticketKey: ticketKey,
-            customParams: _customParams,
-            section: 'qualityGates'
-        });
-        if (!gateResult.success) {
-            const error = 'Quality gate failed before development publish: ' + gateResult.failedGate + '\n' + gateResult.error;
-            resetDevelopmentForRetry(ticketKey, statuses, _customParams, actualParams.metadata, 'Quality Gate', error);
-            return { success: true, path: 'development-reset-for-retry', error: error };
-        }
-        var policyResult = feedbackLoop.runPolicyGates({
-            ticketKey: ticketKey,
-            customParams: _customParams,
-            section: 'policyGates'
-        });
-        if (!policyResult.success) {
-            const error = 'Policy gate failed before development publish: ' + policyResult.failedGate + '\n' + policyResult.error;
-            resetDevelopmentForRetry(ticketKey, statuses, _customParams, actualParams.metadata, 'Policy Gate', error);
-            return { success: true, path: 'development-reset-for-retry', error: error };
-        }
-
-        // Perform git operations
         const prTarget = configLoader.resolvePRTargetBranch(config, params.ticket || actualParams.ticket);
-        const gitResult = performGitOperations(branchName, commitMessage, prTarget, config, _customParams, ticketKey);
-        if (!gitResult.success) {
-            if (gitResult.isPushFailure) {
+
+        // Push the agent's work before running quality gates.
+        // If the gate feedback loop fails and cannot resume, the branch is already on remote
+        // and a retry can continue from the pushed state instead of losing all changes.
+        const initialGitResult = performGitOperations(branchName, commitMessage, prTarget, config, _customParams, ticketKey);
+        if (!initialGitResult.success) {
+            if (initialGitResult.isPushFailure) {
                 // Push was rejected — ask the agent to fix the commit, then retry
-                const retryResult = retryAfterPushFailure(ticketKey, branchName, gitResult.error);
+                const retryResult = retryAfterPushFailure(ticketKey, branchName, initialGitResult.error);
                 if (!retryResult.success) {
                     if (resumeDevelopmentAgent(params, ticketKey, _customParams, 'development_git_push', retryResult.error)) {
                         return action(params);
@@ -738,8 +719,8 @@ function action(params) {
                     resetDevelopmentForRetry(ticketKey, statuses, _customParams, actualParams.metadata, 'Git Push (after retry)', retryResult.error);
                     return { success: true, path: 'development-reset-for-retry', error: 'Git push failed even after retry: ' + retryResult.error };
                 }
-                // Push succeeded after agent fix — continue to PR creation
-            } else if (gitResult.error && gitResult.error.indexOf('No changes were made') !== -1) {
+                // Push succeeded after agent fix — continue to quality gates
+            } else if (initialGitResult.error && initialGitResult.error.indexOf('No changes were made') !== -1) {
                 // No git changes detected. Distinguish two cases:
                 //   (A) Agent completed successfully and determined no code changes are needed
                 //       (e.g. fix already merged via prior PR). outputs/response.md exists with content.
@@ -801,11 +782,57 @@ function action(params) {
                 }
                 return { success: true, path: 'interrupted', ticketKey: ticketKey };
             } else {
-                if (resumeDevelopmentAgent(params, ticketKey, _customParams, 'development_git_operations', gitResult.error)) {
+                if (resumeDevelopmentAgent(params, ticketKey, _customParams, 'development_git_operations', initialGitResult.error)) {
                     return action(params);
                 }
-                resetDevelopmentForRetry(ticketKey, statuses, _customParams, actualParams.metadata, 'Git Operations', gitResult.error);
-                return { success: true, path: 'development-reset-for-retry', error: 'Git operations failed: ' + gitResult.error };
+                resetDevelopmentForRetry(ticketKey, statuses, _customParams, actualParams.metadata, 'Git Operations', initialGitResult.error);
+                return { success: true, path: 'development-reset-for-retry', error: 'Git operations failed: ' + initialGitResult.error };
+            }
+        }
+
+        var gateResult = feedbackLoop.runQualityGates({
+            ticketKey: ticketKey,
+            customParams: _customParams,
+            section: 'qualityGates'
+        });
+        if (!gateResult.success) {
+            const error = 'Quality gate failed before development publish: ' + gateResult.failedGate + '\n' + gateResult.error;
+            resetDevelopmentForRetry(ticketKey, statuses, _customParams, actualParams.metadata, 'Quality Gate', error);
+            return { success: true, path: 'development-reset-for-retry', error: error };
+        }
+        var policyResult = feedbackLoop.runPolicyGates({
+            ticketKey: ticketKey,
+            customParams: _customParams,
+            section: 'policyGates'
+        });
+        if (!policyResult.success) {
+            const error = 'Policy gate failed before development publish: ' + policyResult.failedGate + '\n' + policyResult.error;
+            resetDevelopmentForRetry(ticketKey, statuses, _customParams, actualParams.metadata, 'Policy Gate', error);
+            return { success: true, path: 'development-reset-for-retry', error: error };
+        }
+
+        // Push any fixes the gate feedback loop applied to the working tree.
+        const gateFixGitResult = performGitOperations(branchName, commitMessage + ' (quality gate fixes)', prTarget, config, _customParams, ticketKey);
+        if (!gateFixGitResult.success) {
+            if (gateFixGitResult.isPushFailure) {
+                const retryResult = retryAfterPushFailure(ticketKey, branchName, gateFixGitResult.error);
+                if (!retryResult.success) {
+                    if (resumeDevelopmentAgent(params, ticketKey, _customParams, 'gate_fix_git_push', retryResult.error)) {
+                        return action(params);
+                    }
+                    resetDevelopmentForRetry(ticketKey, statuses, _customParams, actualParams.metadata, 'Gate Fix Git Push (after retry)', retryResult.error);
+                    return { success: true, path: 'development-reset-for-retry', error: 'Gate fix push failed even after retry: ' + retryResult.error };
+                }
+                // Push succeeded after agent fix — continue to PR creation
+            } else if (gateFixGitResult.error && gateFixGitResult.error.indexOf('No changes were made') !== -1) {
+                // The feedback loop did not produce additional file changes; nothing to push.
+                console.log('No additional changes after quality gate feedback loop — continuing to PR creation.');
+            } else {
+                if (resumeDevelopmentAgent(params, ticketKey, _customParams, 'gate_fix_git_operations', gateFixGitResult.error)) {
+                    return action(params);
+                }
+                resetDevelopmentForRetry(ticketKey, statuses, _customParams, actualParams.metadata, 'Gate Fix Git Operations', gateFixGitResult.error);
+                return { success: true, path: 'development-reset-for-retry', error: 'Gate fix git operations failed: ' + gateFixGitResult.error };
             }
         }
 
