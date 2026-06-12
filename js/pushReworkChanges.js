@@ -313,12 +313,20 @@ function postThreadReplies(scm, pullRequestId, outputOptions) {
     return posted;
 }
 
-function postPRComment(scm, pullRequestId, fixSummary, ticketKey) {
+function postPRComment(scm, pullRequestId, fixSummary, ticketKey, repliesPosted) {
     try {
-        const commentText = '## 🔧 Rework Complete — ' + ticketKey + '\n\n' +
-            'All PR review comments have been addressed. See fix summary below.\n\n' +
-            '---\n\n' +
-            fixSummary;
+        var commentText;
+        if (repliesPosted > 0) {
+            // When review thread replies exist, keep the top-level comment minimal.
+            // The detailed answers live in the thread replies.
+            commentText = '## 🔧 Rework Complete — ' + ticketKey + '\n\n' +
+                'All review feedback has been addressed in the thread replies above.';
+        } else {
+            commentText = '## 🔧 Rework Complete — ' + ticketKey + '\n\n' +
+                'All PR review comments have been addressed. See fix summary below.\n\n' +
+                '---\n\n' +
+                fixSummary;
+        }
         scm.addComment(pullRequestId, commentText);
         console.log('✅ Posted fix summary to PR #' + pullRequestId);
         return true;
@@ -510,7 +518,7 @@ function action(params) {
             var hasMeaningfulSummary = fixSummary && fixSummary.length > 50
                 && fixSummary !== '_(No fix summary generated)_';
             if (repliesPosted > 0 || codeChangesCommitted || hasMeaningfulSummary) {
-                prCommentPosted = postPRComment(scm, pr.number, fixSummary, ticketKey);
+                prCommentPosted = postPRComment(scm, pr.number, fixSummary, ticketKey, repliesPosted);
             } else {
                 console.log('ℹ️ No thread replies, no code changes, and no meaningful summary — skipping general PR comment');
             }

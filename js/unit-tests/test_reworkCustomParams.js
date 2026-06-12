@@ -40,7 +40,7 @@ function loadPushReworkChangesForAction(mocks) {
                     return {
                         getRemoteRepoInfo: function() { return { owner: 'IstiN', repo: 'trackstate' }; },
                         listPrs: function() { return [{ number: 1571, title: 'TS-1293 Fix', html_url: 'https://github.com/IstiN/trackstate/pull/1571', head: { ref: 'ai/TS-1293' } }]; },
-                        addComment: function() { mocks.prComments = (mocks.prComments || 0) + 1; },
+                        addComment: function(prId, text) { mocks.prComments = (mocks.prComments || 0) + 1; mocks.prCommentTexts = (mocks.prCommentTexts || []).concat(text); },
                         replyToThread: function(prId, thread, text) {
                             mocks.threadReplies = (mocks.threadReplies || 0) + 1;
                             mocks.replyTexts = (mocks.replyTexts || []).concat(text);
@@ -282,6 +282,10 @@ suite('rework custom params', function() {
         assert.equal(mocks.threadReplies, 2);
         assert.equal(mocks.resolvedThreads, 2);
         assert.deepEqual(mocks.replyTexts, ['✅ Fixed in `ai/TS-1293`.', '✅ Renamed variable per review.']);
+        assert.equal(mocks.prComments, 1, 'must post a single minimal top-level PR comment');
+        assert.ok(mocks.prCommentTexts[0].indexOf('Rework Complete') !== -1, 'top-level comment should mention rework complete');
+        assert.ok(mocks.prCommentTexts[0].indexOf('thread replies') !== -1, 'top-level comment should point to thread replies');
+        assert.ok(mocks.prCommentTexts[0].indexOf('✅ Fixed in') === -1, 'top-level comment must not duplicate thread reply bodies');
     });
 
     test('merges pr_test_automation_rework jobParamPatches into runtime customParams', function() {
