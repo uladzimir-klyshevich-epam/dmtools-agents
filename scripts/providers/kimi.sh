@@ -253,7 +253,9 @@ PY
 
 # Extract token usage from the wire file Kimi CLI wrote during the run and write
 # a machine-readable JSON summary to outputs/kimi_usage.json.
-# Wire file location: $KIMI_CODE_HOME/sessions/<work-dir-hash>/<session-id>/agents/main/wire.jsonl
+# Wire file locations (Kimi layout changed across releases):
+#   - newer: $KIMI_CODE_HOME/sessions/<work-dir-hash>/<session-id>/wire.jsonl
+#   - legacy: $KIMI_CODE_HOME/sessions/<work-dir-hash>/<session-id>/agents/main/wire.jsonl
 print_kimi_usage_summary_and_write_json() {
   local session_id="$1"
   local kimi_code_home="${KIMI_CODE_HOME:-${HOME}/.kimi-code}"
@@ -263,7 +265,10 @@ print_kimi_usage_summary_and_write_json() {
   echo "  Session ID: ${session_id}"
 
   if [ -n "${session_id}" ]; then
-    wire_file="$(find "${kimi_code_home}/sessions" -path "*/${session_id}/agents/main/wire.jsonl" -type f 2>/dev/null | head -1 || true)"
+    wire_file="$(find "${kimi_code_home}/sessions" -type f \( \
+      -path "*/${session_id}/wire.jsonl" -o \
+      -path "*/${session_id}/agents/main/wire.jsonl" \
+    \) 2>/dev/null | head -1 || true)"
   fi
 
   if [ -z "${wire_file}" ] || [ ! -f "${wire_file}" ]; then
