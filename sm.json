@@ -167,6 +167,14 @@
           "enabled": true
         },
         {
+          "description": "Ready For Testing Bugs → automate linked test cases in bulk",
+          "jql": "project = {jiraProject} AND issuetype in ('Bug') AND status in ('Ready For Testing')",
+          "configFile": "agents/bug_test_automation.json",
+          "skipIfLabel": "sm_bug_test_automation_triggered",
+          "addLabel": "sm_bug_test_automation_triggered",
+          "enabled": true
+        },
+        {
           "description": "Ready For Testing Stories → automate linked test cases in bulk",
           "jql": "project = {jiraProject} AND issuetype in ('Story') AND status in ('Ready For Testing')",
           "configFile": "agents/story_test_automation.json",
