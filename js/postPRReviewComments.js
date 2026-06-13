@@ -380,15 +380,23 @@ function postInlineComment(scm, pullRequestId, inlineComment, ticketKey, working
 
         console.log('Posting inline comment on ' + filePath + ':' + inlineComment.line);
 
+        var diffText = null;
         try {
-            var diffText = scm.getPrDiff(pullRequestId);
-            if (diffText !== null && !isLinePresentInDiff(diffText, filePath, inlineComment.line)) {
-                console.warn('Inline comment line is not present in PR diff; falling back to PR comment on ' + filePath + ':' + inlineComment.line);
-                postFallbackInlineComment(scm, pullRequestId, filePath, inlineComment.line, commentText);
-                return true;
-            }
+            diffText = scm.getPrDiff(pullRequestId);
         } catch (diffError) {
             console.warn('Could not fetch PR diff for inline comment validation:', diffError.message || diffError);
+        }
+
+        if (diffText === null || diffText === '') {
+            console.warn('PR diff unavailable; falling back to general PR comment on ' + filePath + ':' + inlineComment.line);
+            postFallbackInlineComment(scm, pullRequestId, filePath, inlineComment.line, commentText);
+            return true;
+        }
+
+        if (!isLinePresentInDiff(diffText, filePath, inlineComment.line)) {
+            console.warn('Inline comment line is not present in PR diff; falling back to PR comment on ' + filePath + ':' + inlineComment.line);
+            postFallbackInlineComment(scm, pullRequestId, filePath, inlineComment.line, commentText);
+            return true;
         }
 
         scm.addInlineComment(

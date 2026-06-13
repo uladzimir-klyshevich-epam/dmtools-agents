@@ -99,7 +99,10 @@ function _createGithubProvider(workspace, repository) {
             return github_remove_pr_label({ workspace: workspace, repository: repository, pullRequestId: String(prId), label: label });
         },
         getPrDiff: function(prId) {
-            return github_get_pr_diff({ workspace: workspace, repository: repository, pullRequestId: String(prId) });
+            // Note: the generated GitHub MCP executor expects the parameter name
+            // to be exactly 'pullRequestID' (capital D). Passing 'pullRequestId'
+            // causes a "Required parameter 'pullRequestID' is missing" error.
+            return github_get_pr_diff({ workspace: workspace, repository: repository, pullRequestID: String(prId) });
         },
         getCommitCheckRuns: function(sha) {
             return github_get_commit_check_runs({ workspace: workspace, repository: repository, commitSha: sha });
