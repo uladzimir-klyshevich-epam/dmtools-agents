@@ -193,4 +193,41 @@ suite('prepareBulkBugsCreationContext', function() {
         assert.contains(failedWrite.content, 'Custom field value');
     });
 
+    test('extracts Failed Reason when dmtools transforms customfield ID to friendly key', function() {
+        var loaded = loadPrepareBulkBugsCreationContext({
+            jira_search_by_jql: function(args) {
+                loaded.calls.searches.push(args);
+                if (args.jql.indexOf('status = Failed') !== -1) {
+                    // Verify the raw custom field ID is requested
+                    assert.ok(args.fields.indexOf('customfield_10535') !== -1,
+                        'raw customfield ID should be requested');
+                    return [{
+                        key: 'TS-801',
+                        fields: {
+                            summary: 'Transformed key TC',
+                            description: 'Testing transformed field key',
+                            'Failed Reason (customfield_10535)': 'Transformed field value'
+                        }
+                    }];
+                }
+                return [];
+            }
+        });
+
+        loaded.mod.action({
+            inputFolderPath: 'input/bulk-transformed',
+            customParams: {
+                batchSize: 50,
+                failedReasonField: 'customfield_10535'
+            },
+            jira: { project: 'TS' }
+        });
+
+        var failedWrite = loaded.calls.writes.filter(function(w) {
+            return w.path === 'input/bulk-transformed/failed_tcs.json';
+        })[0];
+        assert.ok(failedWrite, 'failed_tcs.json should be written');
+        assert.contains(failedWrite.content, 'Transformed field value');
+    });
+
 });

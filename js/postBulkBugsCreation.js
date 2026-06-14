@@ -154,6 +154,16 @@ function getFailedReasonForTc(tcKey, fieldName) {
         var raw = fields[fieldName];
         if (typeof raw === 'string') return raw;
         if (raw && typeof raw.value === 'string') return raw.value;
+        // Fallback: dmtools may transform customfield_12345 into "Name (customfield_12345)".
+        if (fieldName.indexOf('customfield_') !== -1) {
+            for (var key in fields) {
+                if (fields.hasOwnProperty(key) && key.indexOf(fieldName) !== -1) {
+                    var v = fields[key];
+                    if (typeof v === 'string') return v;
+                    if (v && typeof v.value === 'string') return v.value;
+                }
+            }
+        }
         return '';
     } catch (e) {
         console.warn('Could not read Failed Reason for', tcKey, ':', e);

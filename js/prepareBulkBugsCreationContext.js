@@ -39,6 +39,16 @@ function extractFailedReason(fields, fieldName) {
     var raw = fields[fieldName];
     if (typeof raw === 'string') return raw;
     if (raw && typeof raw.value === 'string') return raw.value;
+    // Fallback: dmtools may transform customfield_12345 into "Name (customfield_12345)".
+    if (fieldName.indexOf('customfield_') !== -1) {
+        for (var key in fields) {
+            if (fields.hasOwnProperty(key) && key.indexOf(fieldName) !== -1) {
+                var v = fields[key];
+                if (typeof v === 'string') return v;
+                if (v && typeof v.value === 'string') return v.value;
+            }
+        }
+    }
     return '';
 }
 
@@ -92,7 +102,7 @@ function action(params) {
         var failedTCs = [];
         try {
             var tcFields = ['key', 'summary', 'description', 'comment', 'status', 'labels', 'parent', 'attachment'];
-            if (failedReasonFieldName && failedReasonFieldName.indexOf('customfield_') === 0) {
+            if (failedReasonFieldName && failedReasonFieldName.indexOf('customfield_') !== -1) {
                 tcFields.push(failedReasonFieldName);
             }
             var tcResults = jira_search_by_jql({
