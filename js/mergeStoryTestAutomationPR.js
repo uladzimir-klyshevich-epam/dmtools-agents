@@ -33,7 +33,7 @@ function releaseLock(storyKey, customParams) {
 function fetchLinkedTestCases(storyKey, testCaseType) {
     var jql = 'issue in linkedIssues("' + storyKey + '") AND issuetype = "' + testCaseType + '"';
     try {
-        return jira_search_by_jql({ jql: jql, maxResults: 100 }) || [];
+        return jira_search_by_jql({ jql: jql, maxResults: 100, fields: ['key', 'status'] }) || [];
     } catch (e) {
         console.warn('Failed to fetch linked Test Cases for merge:', e);
         return [];

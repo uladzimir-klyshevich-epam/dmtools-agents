@@ -74,6 +74,7 @@ suite('mergeStoryTestAutomationPR', function() {
             github_remove_pr_label: function(num, label) { labelsRemoved.push({ num: num, label: label }); },
             jira_search_by_jql: function(args) {
                 assert.contains(args.jql, 'linkedIssues("TS-50")');
+                assert.deepEqual(args.fields, ['key', 'status']);
                 return [
                     { key: 'TS-51', fields: { status: { name: 'In Review - Passed' } } },
                     { key: 'TS-52', fields: { status: { name: 'In Review - Failed' } } }

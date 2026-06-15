@@ -66,7 +66,7 @@ function readLinkedTestCases(storyKey, testCaseType) {
 
     try {
         var jql = 'issue in linkedIssues("' + storyKey + '") AND issuetype = "' + testCaseType + '"';
-        var results = jira_search_by_jql({ jql: jql, maxResults: 100 });
+        var results = jira_search_by_jql({ jql: jql, maxResults: 100, fields: ['key'] });
         return Array.isArray(results) ? results : [];
     } catch (e) {
         console.warn('Failed to fetch linked Test Cases from Jira:', e);
