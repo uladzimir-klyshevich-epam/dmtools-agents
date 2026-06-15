@@ -7,7 +7,7 @@
 
 var configLoader = require('./configLoader.js');
 var prHelper = require('./common/pullRequest.js');
-const { STATUSES } = require('./config.js');
+const { STATUSES, resolveStatuses } = require('./config.js');
 
 function cleanCommandOutput(output) {
     if (!output) return '';
@@ -216,6 +216,33 @@ function writeLinkedTestCases(storyKey, testCases) {
     }
 }
 
+function getTestCaseDirectory(tcKey, testFilesPath) {
+    var basePath = (testFilesPath || 'testing/').replace(/\/$/, '');
+    return basePath + '/tests/' + tcKey;
+}
+
+function removeIrrelevantTestCode(testCases, workingDir, testFilesPath, irrelevantStatus) {
+    var removed = [];
+    testCases.forEach(function(tc) {
+        var status = tc.fields && tc.fields.status && tc.fields.status.name;
+        if (status !== irrelevantStatus) return;
+        var dir = getTestCaseDirectory(tc.key, testFilesPath);
+        try {
+            var lsOutput = cleanCommandOutput(runGit('git ls-files -- ' + dir, workingDir) || '');
+            if (!lsOutput.trim()) {
+                console.log('No tracked test code to remove for irrelevant TC:', tc.key);
+                return;
+            }
+            console.log('Removing test code for irrelevant TC:', tc.key, '—', dir);
+            runGit('git rm -r --ignore-unmatch -- ' + dir, workingDir);
+            removed.push(tc.key);
+        } catch (e) {
+            console.warn('Failed to remove test code for irrelevant TC', tc.key, ':', e);
+        }
+    });
+    return removed;
+}
+
 function action(params) {
     try {
         var actualParams = params.inputFolderPath ? params : (params.jobParams || params);
@@ -226,6 +253,9 @@ function action(params) {
         var testCaseType = projectConfig.jira && projectConfig.jira.issueTypes && projectConfig.jira.issueTypes.TEST_CASE
             ? projectConfig.jira.issueTypes.TEST_CASE
             : 'Test Case';
+        var customParams = (params.jobParams || params).customParams || {};
+        var statuses = resolveStatuses(customParams);
+        var testFilesPath = customParams.testFilesGlob || 'testing/';
 
         console.log('=== Story test automation setup for:', storyKey, '===');
 
@@ -244,6 +274,16 @@ function action(params) {
             checkoutBranch(storyKey, config);
         } catch (e) {
             console.error('Branch checkout failed (non-fatal):', e);
+        }
+
+        // Step 3: Remove test code for linked TCs that are marked Irrelevant
+        try {
+            var removed = removeIrrelevantTestCode(testCases, config.workingDir || null, testFilesPath, statuses.IRRELEVANT || 'Irrelevant');
+            if (removed.length > 0) {
+                console.log('Removed test code for irrelevant TCs:', removed.join(', '));
+            }
+        } catch (e) {
+            console.warn('Removing irrelevant test code failed (non-fatal):', e);
         }
 
         console.log('✅ Story test automation setup complete for', storyKey);

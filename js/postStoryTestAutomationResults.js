@@ -366,6 +366,31 @@ function moveSkippedTcToStatus(tcKey, skippedStatus) {
     }
 }
 
+function getTestCaseDirectory(tcKey, testFilesPath) {
+    var basePath = (testFilesPath || 'testing/').replace(/\/$/, '');
+    return basePath + '/tests/' + tcKey;
+}
+
+function deleteTestCaseCode(tcKey, testFilesPath, workingDir) {
+    try {
+        var dir = getTestCaseDirectory(tcKey, testFilesPath);
+        console.log('Deleting test code for', tcKey, '—', dir);
+        runInRepo('git rm -r --ignore-unmatch -- ' + dir, workingDir);
+    } catch (e) {
+        console.warn('Failed to delete test code for', tcKey, ':', e);
+    }
+}
+
+function moveIrrelevantTcToStatus(tcKey, irrelevantStatus, testFilesPath, workingDir) {
+    try {
+        jira_move_to_status({ key: tcKey, statusName: irrelevantStatus });
+        console.log('✅ Moved', tcKey, 'to', irrelevantStatus, '(irrelevant)');
+    } catch (e) {
+        console.warn('Failed to move irrelevant Test Case', tcKey, ':', e);
+    }
+    deleteTestCaseCode(tcKey, testFilesPath, workingDir);
+}
+
 function autoStartStoryTestReview(storyKey, config, customParams, noCodeChanges) {
     if (noCodeChanges) {
         console.log('ℹ️ autoStartReview: skipped — no test code changes to review');
@@ -543,6 +568,9 @@ function action(params) {
                 } else if (item.status === 'skipped') {
                     // Skipped tests are final — no PR/review needed.
                     moveSkippedTcToStatus(item.testCaseKey, statuses.SKIPPED || 'Skipped');
+                } else if (item.status === 'irrelevant') {
+                    // Legacy/no-longer-applicable tests are final; delete their test code.
+                    moveIrrelevantTcToStatus(item.testCaseKey, statuses.IRRELEVANT || 'Irrelevant', testFilesPath, workingDir);
                 } else {
                     console.log('Skipping status update for', item.testCaseKey, '— status:', item.status);
                 }

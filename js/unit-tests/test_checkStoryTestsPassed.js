@@ -64,7 +64,7 @@ suite('checkStoryTestsPassed', function() {
         assert.equal(removedLabels.length, 0, 'lock should not be released after Done');
     });
 
-    test('moves Story to Done when TCs are Passed or Skipped', function() {
+    test('moves Story to Done when TCs are Passed, Skipped, or Irrelevant', function() {
         var moved = [];
         var comments = [];
         var removedLabels = [];
@@ -73,7 +73,7 @@ suite('checkStoryTestsPassed', function() {
             jira_search_by_jql: function(args) {
                 assert.deepEqual(args.fields, ['key', 'status']);
                 if (args.jql.indexOf('issuetype = "Test Case"') !== -1) {
-                    return [makeTc('TS-21', 'Passed'), makeTc('TS-22', 'Skipped')];
+                    return [makeTc('TS-21', 'Passed'), makeTc('TS-22', 'Skipped'), makeTc('TS-23', 'Irrelevant')];
                 }
                 return [];
             },
@@ -150,7 +150,7 @@ suite('checkStoryTestsPassed', function() {
         assert.deepEqual(removedLabels, [{ key: 'TS-30', label: 'sm_story_done_check_triggered' }]);
     });
 
-    test('waits when a Failed TC coexists with Skipped TCs', function() {
+    test('waits when a Failed TC coexists with Skipped or Irrelevant TCs', function() {
         var moved = [];
         var removedLabels = [];
 
@@ -158,7 +158,7 @@ suite('checkStoryTestsPassed', function() {
             jira_search_by_jql: function(args) {
                 assert.deepEqual(args.fields, ['key', 'status']);
                 if (args.jql.indexOf('issuetype = "Test Case"') !== -1) {
-                    return [makeTc('TS-33', 'Failed'), makeTc('TS-34', 'Skipped')];
+                    return [makeTc('TS-33', 'Failed'), makeTc('TS-34', 'Skipped'), makeTc('TS-35', 'Irrelevant')];
                 }
                 return [];
             },

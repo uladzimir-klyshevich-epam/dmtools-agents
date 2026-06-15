@@ -105,7 +105,7 @@ function action(params) {
         allTCs.forEach(function(tc) {
             var status = tc.fields && tc.fields.status && tc.fields.status.name;
 
-            if (status === statuses.PASSED || status === statuses.SKIPPED) {
+            if (status === statuses.PASSED || status === statuses.SKIPPED || status === statuses.IRRELEVANT) {
                 return;
             }
 

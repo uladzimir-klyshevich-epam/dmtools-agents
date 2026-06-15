@@ -35,6 +35,7 @@ const STATUSES = {
     BUG_TO_FIX: 'Bug To Fix',                        // Bug linked/created for this TC, waiting for fix
     BACKLOG: 'Backlog',                              // Ticket waiting to be picked up
     SKIPPED: 'Skipped',                              // Test intentionally skipped (infra/missing platform/etc.)
+    IRRELEVANT: 'Irrelevant',                        // Test became legacy / no longer applicable
     BA_ANALYSIS: 'BA Analysis'                       // Story ready for BA analysis after PO Review
 };
 

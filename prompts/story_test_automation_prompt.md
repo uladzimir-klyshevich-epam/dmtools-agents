@@ -13,6 +13,7 @@
 1. Run `codegraph context "{STORY_KEY} test automation existing tests and reusable helpers"` before grepping files.
 2. For each linked Test Case `{TC_KEY}`:
    - Check `testing/tests/{TC_KEY}/`.
+   - If the Test Case is **legacy, obsolete, or no longer applicable** (e.g., the product behavior or external contract it verified has been removed/changed), record `status: "irrelevant"` and do NOT write or keep test code for it.
    - If it exists, run the test and record the result.
    - If it is missing, write a new automated test following the architecture rules.
 3. After running/writing, re-run any failed test at least once to confirm it is a real failure (not a flaky environment issue).

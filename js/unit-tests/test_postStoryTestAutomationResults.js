@@ -274,6 +274,57 @@ suite('postStoryTestAutomationResults: bulk result processing', function() {
         ]);
     });
 
+    test('moves irrelevant TCs to Irrelevant and deletes their test code', function() {
+        var statusMoves = [];
+        var gitCommands = [];
+
+        var module = loadPostStoryTestAutomationResults({
+            file_read: function(opts) {
+                if (opts.path === 'outputs/story_test_automation_result.json') {
+                    return JSON.stringify({
+                        storyKey: 'TS-108',
+                        overall: 'mixed',
+                        summary: 'One test irrelevant',
+                        results: [
+                            { testCaseKey: 'TS-109', status: 'passed', testPath: 'testing/tests/TS-109/test.py' },
+                            { testCaseKey: 'TS-110', status: 'irrelevant' }
+                        ]
+                    });
+                }
+                if (opts.path === 'outputs/tracker_comment.md') return 'h3. Story Test Result';
+                if (opts.path && opts.path.indexOf('.dmtools/config') !== -1) return null;
+                return null;
+            },
+            cli_execute_command: function(opts) {
+                gitCommands.push(opts.command);
+                if (opts.command === 'git branch --show-current') return 'test/TS-108';
+                if (opts.command === 'git status --short -- testing') return 'D  testing/tests/TS-110/test.py\n?? testing/tests/TS-109/test.py';
+                if (opts.command === 'git diff --cached --stat') return ' testing/tests/TS-110/test.py | 1 -';
+                if (opts.command.indexOf('git ls-remote --heads origin test/TS-108') === 0) return 'abc\trefs/heads/test/TS-108';
+                if (opts.command.indexOf('gh pr list --head test/TS-108') === 0) return '';
+                if (opts.command.indexOf('gh pr create') === 0) return 'https://github.com/IstiN/trackstate/pull/108';
+                if (opts.command.indexOf('git rm') === 0) return '';
+                return '';
+            },
+            jira_move_to_status: function(args) { statusMoves.push(args); },
+            jira_attach_file_to_ticket: function() {},
+            jira_update_field: function() {}
+        });
+
+        var result = module.action({
+            ticket: { key: 'TS-108', fields: { summary: 'Irrelevant test story' } },
+            jobParams: { customParams: { removeLabel: 'sm_story_test_automation_triggered' } }
+        });
+
+        assert.equal(result.success, true);
+        assert.contains(gitCommands.join('\n'), 'git rm -r --ignore-unmatch -- testing/tests/TS-110');
+        assert.deepEqual(statusMoves, [
+            { key: 'TS-109', statusName: 'In Review - Passed' },
+            { key: 'TS-110', statusName: 'Irrelevant' },
+            { key: 'TS-108', statusName: 'In Testing' }
+        ]);
+    });
+
     test('resumes agent when linked Test Cases are missing from result', function() {
         var resumeCommands = [];
         var filesWritten = {};

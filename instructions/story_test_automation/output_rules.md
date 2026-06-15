@@ -12,7 +12,7 @@ Write `outputs/story_test_automation_result.json` with exactly this schema:
   "results": [
     {
       "testCaseKey": "TS-124",
-      "status": "passed|failed|skipped",
+      "status": "passed|failed|skipped|irrelevant",
       "testPath": "testing/tests/TS-124/...",
       "failedDescriptionFile": "outputs/failed_description_TS-124.md",
       "failureSummary": "One-line failure summary when status is failed."
@@ -25,14 +25,15 @@ Write `outputs/story_test_automation_result.json` with exactly this schema:
 ### Field rules
 
 - `overall`:
-  - `passed` — every result is `passed`.
+  - `passed` — every result is `passed` or `irrelevant`.
   - `failed` — at least one result is `failed` and none are blocked.
-  - `mixed` — some passed and some skipped, but none failed.
+  - `mixed` — some passed/skipped/irrelevant, but none failed.
   - `blocked_by_human` — automation could not run due to missing credentials/data.
 - `results` must contain every linked Test Case found in the input context.
 - `failedDescriptionFile` is required for every `failed` result. It must point to a file under `outputs/`.
 - `failureSummary` is required for every `failed` result.
-- `testPath` is required for every non-skipped result.
+- `testPath` is required for every `passed` result; it should be omitted for `skipped` and `irrelevant`.
+- `irrelevant` — use when the Test Case is legacy, obsolete, or no longer applies to the current product (e.g., a test for a removed workflow job or an external page whose contract changed). The post-action will move it to `Irrelevant` and delete its test code.
 
 ## Mandatory tracker comment
 
