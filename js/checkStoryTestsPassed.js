@@ -14,7 +14,7 @@
  *   bugs) → moves the Story back to "Ready For Testing" to trigger a re-run.
  */
 
-const { STATUSES } = require('./config.js');
+const { STATUSES, resolveStatuses } = require('./config.js');
 const configLoader = require('./configLoader.js');
 const tokenUsageComment = require('./common/tokenUsageComment.js');
 
@@ -22,6 +22,7 @@ function action(params) {
     const ticketKey = params.ticket && params.ticket.key;
     const customParams = params.jobParams && params.jobParams.customParams;
     const removeLabel = customParams && customParams.removeLabel;
+    const statuses = resolveStatuses(customParams);
 
     const projectConfig = configLoader.loadProjectConfig(params.jobParams || params);
     const testCaseType = (projectConfig.jira && projectConfig.jira.issueTypes && projectConfig.jira.issueTypes.TEST_CASE) || 'Test Case';
@@ -76,10 +77,10 @@ function action(params) {
     }
 
     function isInFlightStatus(status) {
-        return status === STATUSES.IN_REVIEW_PASSED ||
-            status === STATUSES.IN_REVIEW_FAILED ||
-            status === STATUSES.IN_DEVELOPMENT ||
-            status === STATUSES.READY_FOR_DEVELOPMENT;
+        return status === statuses.IN_REVIEW_PASSED ||
+            status === statuses.IN_REVIEW_FAILED ||
+            status === statuses.IN_DEVELOPMENT ||
+            status === statuses.READY_FOR_DEVELOPMENT;
     }
 
     try {
@@ -104,7 +105,7 @@ function action(params) {
         allTCs.forEach(function(tc) {
             var status = tc.fields && tc.fields.status && tc.fields.status.name;
 
-            if (status === STATUSES.PASSED) {
+            if (status === statuses.PASSED || status === statuses.SKIPPED) {
                 return;
             }
 
@@ -119,7 +120,7 @@ function action(params) {
                 return;
             }
 
-            if (status === STATUSES.FAILED) {
+            if (status === statuses.FAILED) {
                 waitingForBugsTCs.push(tc.key);
             } else {
                 readyForRetestTCs.push(tc.key);
@@ -132,7 +133,7 @@ function action(params) {
 
             jira_move_to_status({
                 key: ticketKey,
-                statusName: STATUSES.DONE
+                statusName: statuses.DONE
             });
 
             jira_post_comment({
@@ -170,7 +171,7 @@ function action(params) {
 
             jira_move_to_status({
                 key: ticketKey,
-                statusName: STATUSES.BUG_TO_FIX
+                statusName: statuses.BUG_TO_FIX
             });
 
             jira_post_comment({
@@ -204,7 +205,7 @@ function action(params) {
 
         jira_move_to_status({
             key: ticketKey,
-            statusName: STATUSES.READY_FOR_TESTING
+            statusName: statuses.READY_FOR_TESTING
         });
 
         jira_post_comment({

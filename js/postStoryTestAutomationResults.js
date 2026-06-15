@@ -13,7 +13,7 @@
 var configLoader = require('./configLoader.js');
 var prHelper = require('./common/pullRequest.js');
 var autoStart = require('./common/autoStart.js');
-const { GIT_CONFIG, STATUSES, LABELS, JIRA_FIELDS } = require('./config.js');
+const { GIT_CONFIG, STATUSES, LABELS, JIRA_FIELDS, resolveStatuses } = require('./config.js');
 var outputFiles = require('./common/outputFiles.js');
 var tokenUsageComment = require('./common/tokenUsageComment.js');
 
@@ -357,6 +357,15 @@ function finalizeTestCaseStatus(tcKey, status) {
     }
 }
 
+function moveSkippedTcToStatus(tcKey, skippedStatus) {
+    try {
+        jira_move_to_status({ key: tcKey, statusName: skippedStatus });
+        console.log('✅ Moved', tcKey, 'to', skippedStatus, '(skipped)');
+    } catch (e) {
+        console.warn('Failed to move skipped Test Case', tcKey, ':', e);
+    }
+}
+
 function autoStartStoryTestReview(storyKey, config, customParams, noCodeChanges) {
     if (noCodeChanges) {
         console.log('ℹ️ autoStartReview: skipped — no test code changes to review');
@@ -403,6 +412,7 @@ function action(params) {
         const storySummary = params.ticket.fields ? params.ticket.fields.summary : storyKey;
         var config = configLoader.loadProjectConfig(params.jobParams || params);
         var customParams = (params.jobParams || params).customParams || {};
+        var statuses = resolveStatuses(customParams);
         var scm = configLoader.createScm(config);
         var workingDir = config.workingDir || null;
         var testFilesPath = customParams.testFilesGlob || 'testing/';
@@ -530,6 +540,9 @@ function action(params) {
                     if (noCodeChanges) {
                         finalizeTestCaseStatus(item.testCaseKey, item.status);
                     }
+                } else if (item.status === 'skipped') {
+                    // Skipped tests are final — no PR/review needed.
+                    moveSkippedTcToStatus(item.testCaseKey, statuses.SKIPPED || 'Skipped');
                 } else {
                     console.log('Skipping status update for', item.testCaseKey, '— status:', item.status);
                 }

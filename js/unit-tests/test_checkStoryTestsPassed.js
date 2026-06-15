@@ -64,6 +64,36 @@ suite('checkStoryTestsPassed', function() {
         assert.equal(removedLabels.length, 0, 'lock should not be released after Done');
     });
 
+    test('moves Story to Done when TCs are Passed or Skipped', function() {
+        var moved = [];
+        var comments = [];
+        var removedLabels = [];
+
+        var module = loadCheckStoryTestsPassed({
+            jira_search_by_jql: function(args) {
+                assert.deepEqual(args.fields, ['key', 'status']);
+                if (args.jql.indexOf('issuetype = "Test Case"') !== -1) {
+                    return [makeTc('TS-21', 'Passed'), makeTc('TS-22', 'Skipped')];
+                }
+                return [];
+            },
+            jira_move_to_status: function(args) { moved.push(args); },
+            jira_post_comment: function(args) { comments.push(args); },
+            jira_remove_label: function(args) { removedLabels.push(args); }
+        });
+
+        var result = module.action({
+            ticket: { key: 'TS-20' },
+            jobParams: { customParams: { removeLabel: 'sm_story_done_check_triggered' } }
+        });
+
+        assert.equal(result.success, true);
+        assert.equal(result.action, 'moved_to_done');
+        assert.deepEqual(moved, [{ key: 'TS-20', statusName: 'Done' }]);
+        assert.contains(comments[0].comment, 'All Test Cases Passed');
+        assert.equal(removedLabels.length, 0, 'lock should not be released after Done');
+    });
+
     test('waits when a TC is still in In Review - Passed', function() {
         var moved = [];
         var removedLabels = [];
@@ -118,6 +148,34 @@ suite('checkStoryTestsPassed', function() {
         assert.equal(result.action, 'waiting_for_bugs');
         assert.deepEqual(moved, []);
         assert.deepEqual(removedLabels, [{ key: 'TS-30', label: 'sm_story_done_check_triggered' }]);
+    });
+
+    test('waits when a Failed TC coexists with Skipped TCs', function() {
+        var moved = [];
+        var removedLabels = [];
+
+        var module = loadCheckStoryTestsPassed({
+            jira_search_by_jql: function(args) {
+                assert.deepEqual(args.fields, ['key', 'status']);
+                if (args.jql.indexOf('issuetype = "Test Case"') !== -1) {
+                    return [makeTc('TS-33', 'Failed'), makeTc('TS-34', 'Skipped')];
+                }
+                return [];
+            },
+            jira_move_to_status: function(args) { moved.push(args); },
+            jira_post_comment: function() {},
+            jira_remove_label: function(args) { removedLabels.push(args); }
+        });
+
+        var result = module.action({
+            ticket: { key: 'TS-35' },
+            jobParams: { customParams: { removeLabel: 'sm_story_done_check_triggered' } }
+        });
+
+        assert.equal(result.success, true);
+        assert.equal(result.action, 'waiting_for_bugs');
+        assert.deepEqual(moved, []);
+        assert.deepEqual(removedLabels, [{ key: 'TS-35', label: 'sm_story_done_check_triggered' }]);
     });
 
     test('moves Story to Bug To Fix when a TC has a non-Done linked bug', function() {

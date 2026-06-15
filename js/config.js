@@ -34,6 +34,7 @@ const STATUSES = {
     IN_TESTING: 'In Testing',                        // Test cases generated, automation in progress
     BUG_TO_FIX: 'Bug To Fix',                        // Bug linked/created for this TC, waiting for fix
     BACKLOG: 'Backlog',                              // Ticket waiting to be picked up
+    SKIPPED: 'Skipped',                              // Test intentionally skipped (infra/missing platform/etc.)
     BA_ANALYSIS: 'BA Analysis'                       // Story ready for BA analysis after PO Review
 };
 
