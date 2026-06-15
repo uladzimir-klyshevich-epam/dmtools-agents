@@ -188,7 +188,7 @@ suite('postStoryTestAutomationResults: bulk result processing', function() {
                 if (opts.path === 'outputs/story_test_automation_result.json') {
                     return JSON.stringify({
                         storyKey: 'TS-100',
-                        overall: 'mixed',
+                        overall: 'passed',
                         summary: 'Re-test after bug fixes',
                         results: [
                             { testCaseKey: 'TS-101', status: 'passed', testPath: 'testing/tests/TS-101/test.py' },
@@ -235,7 +235,7 @@ suite('postStoryTestAutomationResults: bulk result processing', function() {
                 if (opts.path === 'outputs/story_test_automation_result.json') {
                     return JSON.stringify({
                         storyKey: 'TS-105',
-                        overall: 'mixed',
+                        overall: 'passed',
                         summary: 'Some tests skipped',
                         results: [
                             { testCaseKey: 'TS-106', status: 'passed', testPath: 'testing/tests/TS-106/test.py' },
@@ -283,7 +283,7 @@ suite('postStoryTestAutomationResults: bulk result processing', function() {
                 if (opts.path === 'outputs/story_test_automation_result.json') {
                     return JSON.stringify({
                         storyKey: 'TS-108',
-                        overall: 'mixed',
+                        overall: 'passed',
                         summary: 'One test irrelevant',
                         results: [
                             { testCaseKey: 'TS-109', status: 'passed', testPath: 'testing/tests/TS-109/test.py' },
@@ -341,13 +341,13 @@ suite('postStoryTestAutomationResults: bulk result processing', function() {
                     if (resultReads === 1) {
                         return JSON.stringify({
                             storyKey: 'TS-110',
-                            overall: 'mixed',
+                            overall: 'passed',
                             results: [{ testCaseKey: 'TS-111', status: 'passed', testPath: 'testing/tests/TS-111/test.py' }]
                         });
                     }
                     return JSON.stringify({
                         storyKey: 'TS-110',
-                        overall: 'mixed',
+                        overall: 'passed',
                         results: [
                             { testCaseKey: 'TS-111', status: 'passed', testPath: 'testing/tests/TS-111/test.py' },
                             { testCaseKey: 'TS-112', status: 'passed', testPath: 'testing/tests/TS-112/test.py' }
@@ -397,7 +397,7 @@ suite('postStoryTestAutomationResults: bulk result processing', function() {
                     return JSON.stringify({ storyKey: 'TS-120', testCases: [{ key: 'TS-121' }] });
                 }
                 if (p === 'outputs/story_test_automation_result.json') {
-                    return JSON.stringify({ storyKey: 'TS-120', overall: 'mixed', results: [] });
+                    return JSON.stringify({ storyKey: 'TS-120', overall: 'passed', results: [] });
                 }
                 if (p === 'outputs/.story-test-resume-attempted') return '2';
                 if (p && p.indexOf('.dmtools/config') !== -1) return null;

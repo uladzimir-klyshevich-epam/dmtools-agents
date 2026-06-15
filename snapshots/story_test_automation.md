@@ -133,12 +133,12 @@ Write `outputs/story_test_automation_result.json` with exactly this schema:
 ```json
 {
   "storyKey": "TS-123",
-  "overall": "passed|failed|mixed|blocked_by_human",
+  "overall": "passed|failed|blocked_by_human",
   "summary": "Short human-readable summary of what was done.",
   "results": [
     {
       "testCaseKey": "TS-124",
-      "status": "passed|failed|skipped",
+      "status": "passed|failed|skipped|irrelevant",
       "testPath": "testing/tests/TS-124/...",
       "failedDescriptionFile": "outputs/failed_description_TS-124.md",
       "failureSummary": "One-line failure summary when status is failed."
@@ -151,14 +151,14 @@ Write `outputs/story_test_automation_result.json` with exactly this schema:
 ### Field rules
 
 - `overall`:
-  - `passed` — every result is `passed`.
+  - `passed` — no `failed` results (combination of `passed`, `skipped`, and/or `irrelevant` is OK).
   - `failed` — at least one result is `failed` and none are blocked.
-  - `mixed` — some passed and some skipped, but none failed.
   - `blocked_by_human` — automation could not run due to missing credentials/data.
 - `results` must contain every linked Test Case found in the input context.
 - `failedDescriptionFile` is required for every `failed` result. It must point to a file under `outputs/`.
 - `failureSummary` is required for every `failed` result.
-- `testPath` is required for every non-skipped result.
+- `testPath` is required for every `passed` result; it should be omitted for `skipped` and `irrelevant`.
+- `irrelevant` — use when the Test Case is legacy, obsolete, or no longer applies to the current product (e.g., a test for a removed workflow job or an external page whose contract changed). The post-action will move it to `Irrelevant` and delete its test code.
 
 ## Mandatory tracker comment
 
@@ -643,6 +643,7 @@ Use tracker-specific format:
 1. Run `codegraph context "{STORY_KEY} test automation existing tests and reusable helpers"` before grepping files.
 2. For each linked Test Case `{TC_KEY}`:
    - Check `testing/tests/{TC_KEY}/`.
+   - If the Test Case is **legacy, obsolete, or no longer applicable** (e.g., the product behavior or external contract it verified has been removed/changed), record `status: "irrelevant"` and do NOT write or keep test code for it.
    - If it exists, run the test and record the result.
    - If it is missing, write a new automated test following the architecture rules.
 3. After running/writing, re-run any failed test at least once to confirm it is a real failure (not a flaky environment issue).

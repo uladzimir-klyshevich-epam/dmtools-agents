@@ -5,12 +5,12 @@ Use the same output schema as Story test automation. Write `outputs/story_test_a
 ```json
 {
   "storyKey": "TS-123",
-  "overall": "passed|failed|mixed|blocked_by_human",
+  "overall": "passed|failed|blocked_by_human",
   "summary": "...",
   "results": [
     {
       "testCaseKey": "TS-124",
-      "status": "passed|failed|skipped",
+      "status": "passed|failed|skipped|irrelevant",
       "testPath": "testing/tests/TS-124/...",
       "failedDescriptionFile": "outputs/failed_description_TS-124.md",
       "failureSummary": "..."
@@ -23,9 +23,8 @@ Use the same output schema as Story test automation. Write `outputs/story_test_a
 The `storyKey` field is reused for backward compatibility; put the Bug key here.
 
 - `overall`:
-  - `passed` — every result is `passed`.
+  - `passed` — no `failed` results (combination of `passed`, `skipped`, and/or `irrelevant` is OK).
   - `failed` — at least one result is `failed`.
-  - `mixed` — some passed and some skipped, none failed.
   - `blocked_by_human` — missing credentials/data.
 - `results` must contain every linked Test Case.
 - `failedDescriptionFile` is required for every `failed` result.

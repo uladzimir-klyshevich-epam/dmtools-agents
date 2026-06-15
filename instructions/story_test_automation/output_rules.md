@@ -7,7 +7,7 @@ Write `outputs/story_test_automation_result.json` with exactly this schema:
 ```json
 {
   "storyKey": "TS-123",
-  "overall": "passed|failed|mixed|blocked_by_human",
+  "overall": "passed|failed|blocked_by_human",
   "summary": "Short human-readable summary of what was done.",
   "results": [
     {
@@ -25,9 +25,8 @@ Write `outputs/story_test_automation_result.json` with exactly this schema:
 ### Field rules
 
 - `overall`:
-  - `passed` — every result is `passed` or `irrelevant`.
+  - `passed` — no `failed` results (combination of `passed`, `skipped`, and/or `irrelevant` is OK).
   - `failed` — at least one result is `failed` and none are blocked.
-  - `mixed` — some passed/skipped/irrelevant, but none failed.
   - `blocked_by_human` — automation could not run due to missing credentials/data.
 - `results` must contain every linked Test Case found in the input context.
 - `failedDescriptionFile` is required for every `failed` result. It must point to a file under `outputs/`.
