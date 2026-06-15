@@ -42,6 +42,7 @@ function action(params) {
         try {
             return jira_search_by_jql({
                 jql: 'issue in linkedIssues("' + ticketKey + '") AND issuetype = "' + testCaseType + '"',
+                fields: ['key', 'status'],
                 maxResults: 100
             }) || [];
         } catch (e) {
@@ -54,6 +55,7 @@ function action(params) {
         try {
             return jira_search_by_jql({
                 jql: 'issue in linkedIssues("' + tcKey + '") AND issuetype = "' + bugType + '"',
+                fields: ['key', 'status'],
                 maxResults: 50
             }) || [];
         } catch (e) {

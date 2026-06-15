@@ -41,6 +41,7 @@ suite('checkStoryTestsPassed', function() {
 
         var module = loadCheckStoryTestsPassed({
             jira_search_by_jql: function(args) {
+                assert.deepEqual(args.fields, ['key', 'status']);
                 if (args.jql.indexOf('issuetype = "Test Case"') !== -1) {
                     return [makeTc('TS-11', 'Passed'), makeTc('TS-12', 'Passed')];
                 }
@@ -69,6 +70,7 @@ suite('checkStoryTestsPassed', function() {
 
         var module = loadCheckStoryTestsPassed({
             jira_search_by_jql: function(args) {
+                assert.deepEqual(args.fields, ['key', 'status']);
                 if (args.jql.indexOf('issuetype = "Test Case"') !== -1) {
                     return [makeTc('TS-21', 'In Review - Passed')];
                 }
@@ -96,6 +98,7 @@ suite('checkStoryTestsPassed', function() {
 
         var module = loadCheckStoryTestsPassed({
             jira_search_by_jql: function(args) {
+                assert.deepEqual(args.fields, ['key', 'status']);
                 if (args.jql.indexOf('issuetype = "Test Case"') !== -1) {
                     return [makeTc('TS-31', 'Failed')];
                 }
@@ -124,6 +127,7 @@ suite('checkStoryTestsPassed', function() {
 
         var module = loadCheckStoryTestsPassed({
             jira_search_by_jql: function(args) {
+                assert.deepEqual(args.fields, ['key', 'status']);
                 if (args.jql.indexOf('issuetype = "Test Case"') !== -1) {
                     return [makeTc('TS-41', 'Bug To Fix')];
                 }
@@ -157,6 +161,7 @@ suite('checkStoryTestsPassed', function() {
 
         var module = loadCheckStoryTestsPassed({
             jira_search_by_jql: function(args) {
+                assert.deepEqual(args.fields, ['key', 'status']);
                 if (args.jql.indexOf('issuetype = "Test Case"') !== -1) {
                     return [makeTc('TS-61', 'Bug To Fix'), makeTc('TS-62', 'Passed')];
                 }
