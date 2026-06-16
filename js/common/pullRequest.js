@@ -168,6 +168,91 @@ function readStagedDiffStat(runCommand, workingDir) {
     );
 }
 
+function isSubmodulePath(runCommand, workingDir, path) {
+    try {
+        var stageOutput = cleanCommandOutput(
+            runCommand('git ls-files --stage -- "' + path + '"', workingDir) || ''
+        );
+        return stageOutput.split('\n').some(function(line) {
+            return line.trim().indexOf('160000 ') !== -1;
+        });
+    } catch (e) {
+        return false;
+    }
+}
+
+function resolveMergeConflicts(runCommand, workingDir, baseBranch, branchName) {
+    var conflictFiles = [];
+    try {
+        var statusRaw = cleanCommandOutput(runCommand('git status --short', workingDir) || '');
+        conflictFiles = statusRaw.split('\n')
+            .filter(function(line) { return /^(UU|AA|DD|AU|UA|DU|UD) /.test(line.trim()); })
+            .map(function(line) { return line.trim().substring(3).trim(); })
+            .filter(Boolean);
+    } catch (statusError) {
+        return { resolved: false, error: 'Could not read conflict status' };
+    }
+
+    if (conflictFiles.length === 0) {
+        return { resolved: false, error: 'No conflicted files detected' };
+    }
+
+    var mergeBase = '';
+    try {
+        mergeBase = lastNonEmptyLine(runCommand('git merge-base origin/' + baseBranch + ' HEAD', workingDir));
+    } catch (e) {
+        console.warn('Could not determine merge base for conflict resolution:', e.message || e);
+    }
+
+    conflictFiles.forEach(function(file) {
+        try {
+            if (isSubmodulePath(runCommand, workingDir, file)) {
+                console.log('  Submodule conflict — adopting origin/' + baseBranch + ' version for', file);
+                runCommand('git checkout --theirs -- "' + file + '"', workingDir);
+                runCommand('git add -- "' + file + '"', workingDir);
+                return;
+            }
+
+            var branchChanged = false;
+            if (mergeBase) {
+                try {
+                    var diff = cleanCommandOutput(runCommand('git diff ' + mergeBase + ' HEAD -- "' + file + '"', workingDir) || '');
+                    branchChanged = !!diff.trim();
+                } catch (diffError) {
+                    console.warn('Could not determine change side for', file, ':', diffError.message || diffError);
+                }
+            }
+
+            if (branchChanged) {
+                console.log('  Keeping branch version for', file);
+                runCommand('git checkout --ours -- "' + file + '"', workingDir);
+            } else {
+                console.log('  Keeping origin/' + baseBranch + ' version for', file);
+                runCommand('git checkout --theirs -- "' + file + '"', workingDir);
+            }
+            runCommand('git add -- "' + file + '"', workingDir);
+        } catch (resolveError) {
+            console.warn('Could not auto-resolve', file, ':', resolveError.message || resolveError);
+        }
+    });
+
+    var stillUnmerged = cleanCommandOutput(
+        runCommand('git diff --name-only --diff-filter=U', workingDir) || ''
+    ).split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
+
+    if (stillUnmerged.length > 0) {
+        return { resolved: false, conflictFiles: stillUnmerged, error: 'Unresolved conflicts remain: ' + stillUnmerged.join(', ') };
+    }
+
+    try {
+        runCommand('git commit -m "Merge origin/' + baseBranch + ' into ' + branchName + '"', workingDir);
+        console.log('✅ Auto-resolved merge conflicts and committed sync of origin/' + baseBranch);
+        return { resolved: true };
+    } catch (commitError) {
+        return { resolved: false, error: 'Conflict files resolved but merge commit failed: ' + (commitError.message || commitError) };
+    }
+}
+
 function syncBranchWithBase(options) {
     options = options || {};
     var branchName = options.branchName;
@@ -218,19 +303,19 @@ function syncBranchWithBase(options) {
         console.log('✅ Merged origin/' + baseBranch + ' into ' + branchName);
         return { success: true, updated: true };
     } catch (error) {
-        var conflictFiles = [];
-        try {
-            var statusRaw = cleanCommandOutput(runCommand('git status --short', workingDir) || '');
-            conflictFiles = statusRaw.split('\n')
-                .filter(function(line) { return /^(UU|AA|DD|AU|UA|DU|UD) /.test(line.trim()); })
-                .map(function(line) { return line.trim().substring(3).trim(); });
-        } catch (statusError) {}
+        var autoResolve = resolveMergeConflicts(runCommand, workingDir, baseBranch, branchName);
+        if (autoResolve.resolved) {
+            return { success: true, updated: true, autoResolved: true };
+        }
 
+        var conflictFiles = autoResolve.conflictFiles || [];
         try { runCommand('git merge --abort', workingDir); } catch (abortError) {}
 
         var message = error && error.message ? error.message : String(error);
         if (conflictFiles.length > 0) {
             message = 'Merge conflict while syncing with origin/' + baseBranch + ': ' + conflictFiles.join(', ');
+        } else if (autoResolve.error) {
+            message = autoResolve.error;
         }
         console.warn('Could not synchronize branch with base:', message);
         return {
