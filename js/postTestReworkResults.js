@@ -242,24 +242,31 @@ function createPRIfMissing(scm, branchName, ticketKey, config) {
             return existing[0];
         }
 
-        console.log('No open PR/MR found — creating one via SCM provider...');
+        console.log('No open PR/MR found — creating one...');
         var ticket;
         try { ticket = jira_get_ticket({ key: ticketKey }); } catch (e) { ticket = null; }
         const summary = ticket && ticket.fields ? (ticket.fields.summary || ticketKey) : ticketKey;
         const prTitle = ticketKey + ' ' + summary;
 
-        if (!scm.createPr) {
-            throw new Error('Configured SCM provider does not support createPr');
-        }
-        const prResult = scm.createPr({
+        const prResult = prHelper.createPullRequest({
+            scm: scm,
             title: prTitle,
-            body: 'Auto-created PR after test rework.\n\nTicket: ' + ticketKey,
             branchName: branchName,
-            baseBranch: config.git.baseBranch
+            baseBranch: config.git.baseBranch,
+            bodyContent: 'Auto-created PR after test rework.\n\nTicket: ' + ticketKey
         });
         if (prResult && prResult.success) {
-            console.log('✅ Created PR/MR #' + (prResult.number || '?') + ' for', branchName);
-            return { number: prResult.number, html_url: prResult.prUrl, head: { ref: branchName } };
+            console.log('✅ Created PR for', branchName, ':', prResult.prUrl || '(URL unknown)');
+            // Re-fetch so downstream code gets a consistent PR shape from the SCM.
+            const refreshed = findTestPRForTicket(scm, ticketKey);
+            if (refreshed) return refreshed.pr;
+            // Fallback: build minimal shape from URL if the SCM response differs.
+            var prNumber = null;
+            if (prResult.prUrl) {
+                var m = prResult.prUrl.match(/\/pull\/(\d+)$/);
+                if (m) prNumber = parseInt(m[1], 10);
+            }
+            return { number: prNumber, html_url: prResult.prUrl, head: { ref: branchName } };
         }
         console.warn('Could not create PR/MR:', prResult && prResult.error);
         return null;
@@ -374,9 +381,12 @@ function action(params) {
             return { success: false, error: errMsg };
         }
 
-        const testStatus = result.status.toLowerCase();
+        const rawStatus = result.status.toLowerCase();
+        const testStatus = (rawStatus === 'pass' || rawStatus === 'passed') ? 'passed' :
+                           (rawStatus === 'fail' || rawStatus === 'failed') ? 'failed' :
+                           rawStatus;
         const passed = testStatus === 'passed';
-        console.log('Re-run result:', result.status);
+        console.log('Re-run result:', result.status, '→ normalized:', testStatus);
 
         // Step 2: Configure git + commit/push testing/ only
         try {

@@ -6,6 +6,7 @@
 
 var configLoader = require('./configLoader.js');
 const gh = require('./common/githubHelpers.js');
+var prHelper = require('./common/pullRequest.js');
 
 function findTestPRForTicket(scm, ticketKey) {
     try {
@@ -86,21 +87,23 @@ function action(params) {
                 const summary = ticket && ticket.fields ? (ticket.fields.summary || ticketKey) : ticketKey;
                 const prTitle = configLoader.formatTemplate(config.formats.prTitle.testAutomation, {ticketKey: ticketKey, ticketSummary: summary});
 
-                if (!scm.createPr) {
-                    throw new Error('Configured SCM provider does not support createPr');
-                }
-                const prResult = scm.createPr({
+                const prResult = prHelper.createPullRequest({
+                    scm: scm,
                     title: prTitle,
-                    body: 'Auto-created PR for test automation review.\n\nTicket: ' + ticketKey,
                     branchName: branchName,
-                    baseBranch: config.git.baseBranch
+                    baseBranch: config.git.baseBranch,
+                    bodyContent: 'Auto-created PR for test automation review.\n\nTicket: ' + ticketKey
                 });
                 if (!prResult || !prResult.success) {
-                    throw new Error((prResult && prResult.error) || 'SCM provider failed to create PR/MR');
+                    throw new Error((prResult && prResult.error) || 'Failed to create PR/MR');
                 }
 
-                console.log('✅ Created new PR/MR #' + (prResult.number || '?') + ' for review');
-                found = { merged: false, pr: { number: prResult.number, html_url: prResult.prUrl } };
+                console.log('✅ Created new PR/MR for review:', prResult.prUrl || '(URL unknown)');
+                // Re-fetch so downstream code gets a consistent PR shape from the SCM.
+                found = findTestPRForTicket(scm, ticketKey);
+                if (!found) {
+                    throw new Error('PR was created but could not be found immediately after creation');
+                }
             } catch (createErr) {
                 const err = 'Branch test/' + ticketKey + ' exists but could not create PR: ' + createErr.toString();
                 try { jira_post_comment({ key: ticketKey, comment: 'h3. ⚠️ Test PR Review Setup Failed\n\n' + err + '\n\n_Review cancelled._' }); } catch (e) {}
