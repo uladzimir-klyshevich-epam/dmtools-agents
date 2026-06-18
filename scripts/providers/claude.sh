@@ -10,19 +10,17 @@
 #   CLAUDE_CODE_MAX_TURNS - Max agentic turns (default: 10)
 
 run_claude_code() {
-  if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-    echo "Error: ANTHROPIC_API_KEY environment variable is required for claude-code provider" >&2
-    echo "Set ANTHROPIC_API_KEY (proxy key) in the workflow or dmtools.env" >&2
+  if [ -z "${CLAUDE_CODE_API_KEY:-}" ]; then
+    echo "Error: CLAUDE_CODE_API_KEY environment variable is required for claude-code provider" >&2
     return 1
   fi
 
-  if [ -z "${ANTHROPIC_BASE_URL:-}" ]; then
-    echo "Error: ANTHROPIC_BASE_URL environment variable is required for claude-code provider" >&2
-    echo "Set ANTHROPIC_BASE_URL to your proxy base URL" >&2
+  if [ -z "${CLAUDE_CODE_BASE_URL:-}" ]; then
+    echo "Error: CLAUDE_CODE_BASE_URL environment variable is required for claude-code provider" >&2
     return 1
   fi
 
-  local claude_model="${ANTHROPIC_MODEL:-${CLAUDE_CODE_MODEL:-claude-sonnet-4-6}}"
+  local claude_model="${CLAUDE_CODE_MODEL:-claude-sonnet-4-6}"
   local max_turns="${CLAUDE_CODE_MAX_TURNS:-10}"
 
   if ! command -v claude >/dev/null 2>&1; then
@@ -30,9 +28,15 @@ run_claude_code() {
     return 1
   fi
 
+  # Map CLAUDE_CODE_* → ANTHROPIC_* only for this subprocess.
+  # Never set ANTHROPIC_* in the parent workflow to avoid conflicts with DMTools vars.
+  export ANTHROPIC_BASE_URL="${CLAUDE_CODE_BASE_URL}"
+  export ANTHROPIC_API_KEY="${CLAUDE_CODE_API_KEY}"
+  export ANTHROPIC_MODEL="${claude_model}"
+
   echo "Claude Code Configuration:"
   echo "  Model:       ${claude_model}"
-  echo "  Base URL:    ${ANTHROPIC_BASE_URL}"
+  echo "  Base URL:    ${CLAUDE_CODE_BASE_URL}"
   echo "  Max turns:   ${max_turns}"
   echo "Working directory: $(pwd)"
   echo ""
